@@ -5,10 +5,7 @@ import Icon from "@/components/Icons";
 import { useMemo, useState } from "react";
 import { useAstrape } from "@/hooks/astrape/useAstrape";
 import {
-  BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -139,36 +136,6 @@ export default function ClaimPage() {
     });
   }, [usdAmount, depositPeriod, receiveAmount, currentAPY]);
 
-  // Calculate risk buffer effect data
-  const riskBufferEffectData = useMemo(() => {
-    const maxBuffer = minRiskBuffer * 100;
-    const points = 20;
-    const data = [];
-
-    for (let i = 0; i <= points; i++) {
-      const buffer = (maxBuffer / points) * i;
-      const tempConservativeAPY = currentAPY * 0.8 * (1 - buffer / 100);
-      const periodMonths = slotCountMap[depositPeriod];
-      const periodRate = tempConservativeAPY * (periodMonths / 12);
-      const discountFactor = 1 / (1 + periodRate);
-      const tempReceiveAmount = usdAmount * periodRate * discountFactor;
-
-      // Calculate worst case protection
-      const worstCaseReturn = usdAmount * 0.03 * (periodMonths / 12);
-      const netWorstCase = worstCaseReturn * 0.8;
-      const worstLoss = Math.max(0, tempReceiveAmount - netWorstCase);
-      const worstProtection = ((usdAmount - worstLoss) / usdAmount) * 100;
-
-      data.push({
-        buffer: buffer,
-        advanceInterest: tempReceiveAmount,
-        protection: worstProtection,
-      });
-    }
-
-    return data;
-  }, [currentAPY, minRiskBuffer, usdAmount, depositPeriod]);
-
   return (
     <main className="page-content">
       <motion.div
@@ -211,7 +178,6 @@ export default function ClaimPage() {
               onClickBack={() => setStep("amount-and-period")}
               onClickDeposit={onClickDeposit}
               scenarioAnalysis={scenarioAnalysis}
-              riskBufferEffectData={riskBufferEffectData}
               conservativeAPY={conservativeAPY}
               receiveAmount={receiveAmount}
             />
@@ -303,7 +269,6 @@ function RiskBufferStep({
   onClickBack,
   onClickDeposit,
   scenarioAnalysis,
-  riskBufferEffectData,
   conservativeAPY,
   receiveAmount,
 }: {
@@ -312,33 +277,22 @@ function RiskBufferStep({
   onChangeRiskBuffer: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickBack: () => void;
   onClickDeposit: () => void;
-  scenarioAnalysis: any[];
-  riskBufferEffectData: any[];
+  scenarioAnalysis: {
+    name: string;
+    apy: number;
+    color: string;
+    grossReturn: number;
+    netReturn: number;
+    principalLoss: number;
+    finalPrincipal: number;
+    additionalInterest: number;
+    protection: number;
+  }[];
   conservativeAPY: number;
   receiveAmount: number;
 }) {
   const worstCase = scenarioAnalysis.find((s) => s.name === "Worst (3%)");
   const maxRiskBuffer = minRiskBuffer * 100;
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="rounded border bg-white p-2 shadow">
-          <p className="text-sm font-semibold">{`${label}%`}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {`${entry.dataKey}: ${
-                entry.dataKey === "advanceInterest"
-                  ? `$${entry.value.toLocaleString()}`
-                  : `${entry.value.toFixed(1)}%`
-              }`}
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <>
@@ -380,7 +334,7 @@ function RiskBufferStep({
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip
-                formatter={(value: any, name: string) => {
+                formatter={(value: number, name: string) => {
                   if (name === "protection") return `${value.toFixed(1)}%`;
                   return `$${value.toLocaleString()}`;
                 }}
