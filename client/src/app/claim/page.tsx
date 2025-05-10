@@ -137,51 +137,70 @@ export default function ClaimPage() {
   }, [usdAmount, depositPeriod, receiveAmount, currentAPY]);
 
   return (
-    <main className="page-content">
-      <motion.div
-        className="page__title"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <Icon name="Claim" />
-        <span>Advance Interest Claim</span>
-      </motion.div>
-      <div className="page-widget lg:!-mt-6">
-        <section>
-          <h1 className="text-2xl font-bold">Amount you will receive NOW</h1>
-          <h1 className="text-4xl font-bold">
-            $
-            {receiveAmount.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}{" "}
-            USDC
-          </h1>
-          <div>Target APY: {(conservativeAPY * 100).toFixed(2)}%</div>
-        </section>
+    <main className="w-full overflow-hidden">
+      <div className="relative px-4 py-12 md:px-20 md:py-16">
+        {/* Background effects */}
+        <div className="absolute inset-0 bg-gradient-to-b from-primary-apollo/5 to-transparent" />
+        <div className="absolute -right-20 top-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
+        <div className="absolute -left-20 bottom-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
 
-        <div className="flex w-[800px] flex-col gap-4 rounded-t-md bg-white p-4">
-          {step === "amount-and-period" && (
-            <AmountAndPeriodStep
-              depositAmount={depositAmount}
-              depositPeriod={depositPeriod}
-              usdAmount={usdAmount}
-              setDepositPeriod={setDepositPeriod}
-              onChangeDepositAmount={onChangeDepositAmount}
-              onClickNext={() => setStep("risk-buffer")}
-            />
-          )}
-          {step === "risk-buffer" && (
-            <RiskBufferStep
-              riskBuffer={riskBuffer}
-              minRiskBuffer={minRiskBuffer}
-              onChangeRiskBuffer={onChangeRiskBuffer}
-              onClickBack={() => setStep("amount-and-period")}
-              onClickDeposit={onClickDeposit}
-              scenarioAnalysis={scenarioAnalysis}
-              conservativeAPY={conservativeAPY}
-              receiveAmount={receiveAmount}
-            />
-          )}
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <motion.div
+            className="mb-8 flex items-center gap-3 text-3xl font-bold text-shade-primary"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Icon name="Claim" className="text-primary-apollo" />
+            <span>Advance Interest Claim</span>
+          </motion.div>
+
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+            {/* Left side: Summary */}
+            <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
+              <h1 className="mb-2 text-2xl font-bold text-shade-primary">
+                Amount you will receive NOW
+              </h1>
+              <h1 className="mb-4 text-4xl font-bold text-primary-apollo">
+                $
+                {receiveAmount.toLocaleString(undefined, {
+                  maximumFractionDigits: 0,
+                })}{" "}
+                USDC
+              </h1>
+              <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-4 text-center">
+                <span className="block text-shade-secondary">Target APY</span>
+                <span className="text-2xl font-bold text-shade-primary">
+                  {(conservativeAPY * 100).toFixed(2)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Right side: Form */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
+              {step === "amount-and-period" && (
+                <AmountAndPeriodStep
+                  depositAmount={depositAmount}
+                  depositPeriod={depositPeriod}
+                  usdAmount={usdAmount}
+                  setDepositPeriod={setDepositPeriod}
+                  onChangeDepositAmount={onChangeDepositAmount}
+                  onClickNext={() => setStep("risk-buffer")}
+                />
+              )}
+              {step === "risk-buffer" && (
+                <RiskBufferStep
+                  riskBuffer={riskBuffer}
+                  minRiskBuffer={minRiskBuffer}
+                  onChangeRiskBuffer={onChangeRiskBuffer}
+                  onClickBack={() => setStep("amount-and-period")}
+                  onClickDeposit={onClickDeposit}
+                  scenarioAnalysis={scenarioAnalysis}
+                  conservativeAPY={conservativeAPY}
+                  receiveAmount={receiveAmount}
+                />
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -205,55 +224,84 @@ function AmountAndPeriodStep({
 }) {
   return (
     <>
-      <div className="flex w-full flex-col">
-        <div className="flex w-full flex-row">
-          <div className="flex w-full flex-col">
-            <div className="flex w-full flex-row">
+      <h2 className="mb-4 text-2xl font-bold text-shade-primary">
+        Deposit Details
+      </h2>
+      <div className="mb-6 flex w-full flex-col">
+        <div className="mb-4 flex w-full flex-row justify-between">
+          <div className="flex flex-col">
+            <div className="flex items-end gap-2">
               <input
                 type="number"
                 value={depositAmount}
                 onChange={onChangeDepositAmount}
-                className="w-[80px] appearance-none border-none bg-transparent outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="w-[80px] appearance-none border-none bg-transparent text-3xl font-bold text-primary-apollo outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
-              <h2> zBTC</h2>
+              <h2 className="text-xl font-bold text-shade-primary">zBTC</h2>
             </div>
-            <span>≈ ${usdAmount.toLocaleString()} USD</span>
-            <span>Deposit for {slotCountMap[depositPeriod]} months</span>
+            <span className="text-shade-secondary">
+              ≈ ${usdAmount.toLocaleString()} USD
+            </span>
           </div>
-          <div className="ml-auto flex flex-col">
-            <select
-              value={depositPeriod}
-              onChange={(e) =>
-                setDepositPeriod(e.target.value as DepositPeriod)
-              }
-              className="w-[120px] rounded-md border border-gray-600 bg-transparent p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(depositPeriodsDisplayText).map(
-                ([value, text]) => (
-                  <option
-                    key={value}
-                    value={value}
-                    className="bg-gray-800 text-white"
-                  >
-                    {text}
-                  </option>
-                )
-              )}
-            </select>
+          <div className="flex flex-col items-end justify-end">
+            <div className="flex flex-col items-end gap-1">
+              <span className="text-sm text-shade-secondary">
+                Deposit Period
+              </span>
+              <select
+                value={depositPeriod}
+                onChange={(e) =>
+                  setDepositPeriod(e.target.value as DepositPeriod)
+                }
+                className="w-[120px] rounded-md border border-primary-apollo/20 bg-white p-2 text-shade-primary focus:border-primary-apollo focus:outline-none"
+              >
+                {Object.entries(depositPeriodsDisplayText).map(
+                  ([value, text]) => (
+                    <option
+                      key={value}
+                      value={value}
+                      className="bg-white text-shade-primary"
+                    >
+                      {text}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
           </div>
+        </div>
+        <div className="mb-2 mt-4">
+          <span className="text-sm font-medium text-shade-secondary">
+            Adjust Amount
+          </span>
         </div>
         <input
           type="range"
           min={0.001}
           max={10}
-          color="gray"
           step={0.001}
           value={depositAmount}
           onChange={onChangeDepositAmount}
+          className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-primary-apollo/20"
         />
+        <div className="mt-1 flex justify-between text-xs text-shade-secondary">
+          <span>0.001 zBTC</span>
+          <span>10 zBTC</span>
+        </div>
       </div>
+
+      <div className="mt-4 rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-4">
+        <span className="mb-1 block text-center text-shade-secondary">
+          You will deposit for
+        </span>
+        <div className="text-center text-xl font-bold text-shade-primary">
+          {slotCountMap[depositPeriod]}{" "}
+          {slotCountMap[depositPeriod] === 1 ? "month" : "months"}
+        </div>
+      </div>
+
       <button
-        className="w-full rounded-md bg-blue-500 p-2 text-white hover:bg-blue-600"
+        className="mt-6 w-full rounded-xl bg-primary-apollo py-3 text-white transition-all hover:bg-primary-apollo/90"
         onClick={onClickNext}
       >
         Next
@@ -298,39 +346,58 @@ function RiskBufferStep({
     <>
       <button
         onClick={onClickBack}
-        className="text-blue-500 hover:text-blue-600"
+        className="mb-4 flex items-center text-primary-apollo hover:text-primary-apollo/80"
       >
-        ← Back
+        <Icon name="ChevronDownSmall" size={14} className="mr-1 rotate-90" />{" "}
+        Back
       </button>
-      <h1 className="text-2xl font-bold">Adjust Your Risk Buffer</h1>
-      <span>
+
+      <h1 className="mb-2 text-2xl font-bold text-shade-primary">
+        Adjust Your Risk Buffer
+      </h1>
+      <p className="mb-4 text-shade-secondary">
         Commission rate is fixed at 20%. Adjust risk buffer to balance between
         advance interest and principal protection.
-      </span>
+      </p>
 
-      <div className="flex flex-col gap-2 rounded bg-gray-100 p-4">
-        <div>Risk Buffer: {riskBuffer.toFixed(1)}%</div>
-        <div>Target APY: {(conservativeAPY * 100).toFixed(2)}%</div>
-        <div>
-          Principal Protection: {(worstCase?.protection || 0).toFixed(1)}%
+      <div className="mb-6 flex flex-col gap-3 rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-4">
+        <div className="flex justify-between">
+          <span className="text-shade-secondary">Risk Buffer</span>
+          <span className="font-medium text-shade-primary">
+            {riskBuffer.toFixed(1)}%
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-shade-secondary">Target APY</span>
+          <span className="font-medium text-shade-primary">
+            {(conservativeAPY * 100).toFixed(2)}%
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-shade-secondary">Principal Protection</span>
+          <span className="font-medium text-shade-primary">
+            {(worstCase?.protection || 0).toFixed(1)}%
+          </span>
         </div>
         {riskBuffer >= maxRiskBuffer && (
-          <div className="font-semibold text-green-600">
+          <div className="mt-2 rounded-lg bg-green-50 p-2 text-center font-semibold text-green-600">
             ✓ Principal 100% protected even in worst case (3% APY)
           </div>
         )}
       </div>
 
       {/* Scenario Analysis Bar Chart */}
-      <div className="mt-6">
-        <h3 className="mb-3 text-lg font-semibold">Scenario Analysis</h3>
-        <div className="h-64">
+      <div className="mb-6">
+        <h3 className="mb-3 text-lg font-semibold text-shade-primary">
+          Scenario Analysis
+        </h3>
+        <div className="h-64 rounded-xl border border-primary-apollo/10 bg-white p-2 shadow-sm">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
               data={scenarioAnalysis}
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip
@@ -338,20 +405,37 @@ function RiskBufferStep({
                   if (name === "protection") return `${value.toFixed(1)}%`;
                   return `$${value.toLocaleString()}`;
                 }}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid rgba(0, 0, 0, 0.1)",
+                  boxShadow: "0 4px 6px rgba(0, 0, 0, 0.05)",
+                }}
               />
               <Legend />
-              <Bar dataKey="netReturn" name="Net Return" fill="#22c55e" />
+              <Bar
+                dataKey="netReturn"
+                name="Net Return"
+                fill="#22c55e"
+                radius={[4, 4, 0, 0]}
+              />
               <Bar
                 dataKey="principalLoss"
                 name="Principal Loss"
                 fill="#ef4444"
+                radius={[4, 4, 0, 0]}
               />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="mt-6 text-center">
+      <div className="mb-6">
+        <div className="mb-2 flex justify-between text-sm">
+          <span className="font-medium text-shade-primary">Risk Buffer</span>
+          <span className="font-medium text-primary-apollo">
+            {riskBuffer.toFixed(1)}%
+          </span>
+        </div>
         <input
           type="range"
           min={0}
@@ -359,16 +443,16 @@ function RiskBufferStep({
           step={0.1}
           value={riskBuffer}
           onChange={onChangeRiskBuffer}
-          className="w-full"
+          className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-primary-apollo/20"
         />
-        <div className="mt-1 flex justify-between text-xs text-gray-500">
+        <div className="mt-1 flex justify-between text-xs text-shade-secondary">
           <span>0% (Max Risk)</span>
           <span>{maxRiskBuffer.toFixed(1)}% (Principal Protected)</span>
         </div>
       </div>
 
       <button
-        className="mt-4 w-full rounded-md bg-blue-500 p-2 text-white hover:bg-blue-600"
+        className="mt-4 w-full rounded-xl bg-primary-apollo py-3 text-white transition-all hover:bg-primary-apollo/90"
         onClick={onClickDeposit}
       >
         Receive ${receiveAmount.toLocaleString()} USDC NOW
