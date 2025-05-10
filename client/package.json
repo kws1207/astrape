@@ -13,18 +13,8 @@
     "lint:fix": "next lint --fix",
     "format": "prettier --check \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json,scss}\"",
     "format:fix": "prettier --write \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json,scss}\"",
-    "prepare": "cd .. && husky install client/.husky",
+    "prepare": "husky && husky install",
     "spell-check": "cspell \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json,scss}\""
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "prettier --write",
-      "eslint --fix",
-      "cspell"
-    ],
-    "*.{json,md,yml,scss}": [
-      "prettier --write"
-    ]
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.1.1",
