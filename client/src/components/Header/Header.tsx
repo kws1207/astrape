@@ -4,11 +4,9 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 
 import Icon from "@/components/Icons";
 import MobileMenuButton from "@/components/MobileMenu/MobileMenuButton";
-import { PortfolioDropdown } from "@/components/PortfolioV2/PortfolioDropdown";
 import useStore from "@/stores/store";
 import { MODAL_NAMES } from "@/utils/constant";
 import { cn } from "@/utils/misc";
@@ -22,8 +20,6 @@ export default function Header() {
   const currentModal = useStore((state) => state.currentModal);
   const openModalByName = useStore((state) => state.openModalByName);
   const { connected: solanaWalletConnected } = useWallet();
-
-  const [isPortfolioMenuOpen, setIsPortfolioMenuOpen] = useState(false);
 
   return (
     <header
@@ -54,21 +50,14 @@ export default function Header() {
                 className={`${styles.nav__icon} ${pathname === "/" ? styles.activeLink : ""}`}
               >
                 <Icon name="Provide" />
-                <span>Mint</span>
+                <span>Home</span>
               </Link>
               <Link
-                href="#"
-                className={`relative ${styles.nav__icon} ${pathname === "/portfolio" || pathname === "/portfolio/transactions" ? styles.activeLink : ""}`}
-                onMouseEnter={() => {
-                  setIsPortfolioMenuOpen(true);
-                }}
-                onMouseLeave={() => {
-                  setIsPortfolioMenuOpen(false);
-                }}
+                href="/mint"
+                className={`${styles.nav__icon} ${pathname === "/mint" ? styles.activeLink : ""}`}
               >
-                <Icon name="Portfolio" />
-                <span>Portfolio</span>
-                <PortfolioDropdown isOpen={isPortfolioMenuOpen} />
+                <Icon name="Provide" />
+                <span>Mint</span>
               </Link>
               <Link
                 href="/claim"
