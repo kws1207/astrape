@@ -28,8 +28,8 @@ export default function Home() {
             Interest Now
           </h1>
           <p className="mb-10 max-w-3xl text-lg text-shade-secondary md:text-xl">
-            예치한 BTC에 대한 선이자를 USDC로 즉시 받아가세요. 안전하고 투명한
-            방식으로 암호화폐 자산을 성장시킬 수 있습니다.
+            Receive immediate interest in USDC for your deposited BTC. Grow your
+            crypto assets in a safe and transparent way.
           </p>
           <Button
             label="Get Started"
@@ -44,22 +44,22 @@ export default function Home() {
       <section className="bg-white bg-opacity-50 px-4 py-16 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl">
           <h2 className="mb-12 text-center text-3xl font-bold text-shade-primary">
-            주요 특징
+            Key Features
           </h2>
           <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             <FeatureCard
-              title="선이자 지급"
-              description="BTC 예치와 동시에 zBTC 발행 및 USDC로 선이자를 즉시 지급해 드립니다."
+              title="Upfront Interest"
+              description="Receive immediate USDC interest and zBTC issuance when you deposit BTC."
               iconName="Provide"
             />
             <FeatureCard
-              title="직관적인 UX"
-              description="복잡한 과정 없이 간편하게 자산을 예치하고 이자를 얻을 수 있습니다."
+              title="Intuitive UX"
+              description="Easily deposit assets and earn interest without complicated processes."
               iconName="Interaction"
             />
             <FeatureCard
-              title="지속 가능한 일드"
-              description="이자풀 운영을 통해 안정적이고 지속 가능한 수익을 제공합니다."
+              title="Sustainable Yield"
+              description="Secure stable and sustainable returns through our interest pool operations."
               iconName="Portfolio"
             />
           </div>
@@ -70,34 +70,34 @@ export default function Home() {
       <section className="px-4 py-16">
         <div className="mx-auto max-w-7xl">
           <h2 className="mb-4 text-center text-3xl font-bold text-shade-primary">
-            사용 방법
+            How It Works
           </h2>
           <p className="mx-auto mb-12 max-w-3xl text-center text-shade-secondary">
-            간단한 몇 단계만으로 BTC를 예치하고 이자를 받을 수 있습니다.
+            Deposit BTC and earn interest in just a few simple steps.
           </p>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <StepCard
               number={1}
-              title="지갑 연결"
-              description="암호화폐 지갑을 연결하여 시작하세요."
+              title="Connect Wallet"
+              description="Start by connecting your cryptocurrency wallet."
               iconName="Wallet"
             />
             <StepCard
               number={2}
-              title="예치 안내"
-              description="예치 과정과 이자 정보를 확인하세요."
+              title="Deposit Guide"
+              description="Check the deposit process and interest information."
               iconName="Info"
             />
             <StepCard
               number={3}
-              title="금액 및 기간 선택"
-              description="원하는 BTC 양과 예치 기간을 선택하세요."
+              title="Select Amount & Period"
+              description="Choose your desired BTC amount and deposit period."
               iconName="btc"
             />
             <StepCard
               number={4}
-              title="이자 미리보기"
-              description="받게 될 이자를 미리 확인하세요."
+              title="Interest Preview"
+              description="Preview the interest you'll receive before confirming."
               iconName="Provide"
             />
           </div>
@@ -109,11 +109,11 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 md:grid-cols-2">
           <div>
             <h2 className="mb-6 text-3xl font-bold text-shade-primary">
-              이자 클레임 및 대시보드
+              Interest Claims & Dashboard
             </h2>
             <p className="mb-6 text-lg text-shade-secondary">
-              예치 후 언제든지 이자를 클레임하고 대시보드에서 자산 현황을 확인할
-              수 있습니다.
+              Claim your interest anytime and monitor your assets on the
+              dashboard after deposit.
             </p>
             <ul className="space-y-4">
               <li className="flex items-start">
@@ -122,7 +122,7 @@ export default function Home() {
                   size={18}
                   className="mr-2 mt-1 text-primary-apollo"
                 />
-                <span>언제든지 클레임 가능한 이자 확인</span>
+                <span>Check claimable interest anytime</span>
               </li>
               <li className="flex items-start">
                 <Icon
@@ -130,7 +130,7 @@ export default function Home() {
                   size={18}
                   className="mr-2 mt-1 text-primary-apollo"
                 />
-                <span>실시간 자산 가치 모니터링</span>
+                <span>Monitor asset value in real-time</span>
               </li>
               <li className="flex items-start">
                 <Icon
@@ -138,36 +138,36 @@ export default function Home() {
                   size={18}
                   className="mr-2 mt-1 text-primary-apollo"
                 />
-                <span>예치 만기일 및 해지 옵션 관리</span>
+                <span>Manage maturity dates and withdrawal options</span>
               </li>
             </ul>
           </div>
           <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
             <div className="mb-4 rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-4">
               <h3 className="mb-2 text-xl font-semibold text-shade-primary">
-                예시: BTC 예치
+                Example: BTC Deposit
               </h3>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-shade-secondary">예치 금액</span>
+                <span className="text-shade-secondary">Deposit Amount</span>
                 <span className="font-medium">1 BTC</span>
               </div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-shade-secondary">예치 기간</span>
-                <span className="font-medium">12개월</span>
+                <span className="text-shade-secondary">Deposit Period</span>
+                <span className="font-medium">12 months</span>
               </div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-shade-secondary">선이자 지급</span>
+                <span className="text-shade-secondary">Upfront Interest</span>
                 <span className="font-medium text-green-600">+500 USDC</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-shade-secondary">발행 토큰</span>
+                <span className="text-shade-secondary">Issued Token</span>
                 <span className="font-medium">1 zBTC</span>
               </div>
             </div>
             <div className="rounded-xl bg-primary-apollo/5 p-4">
               <div className="text-center">
                 <span className="mb-1 block text-shade-secondary">
-                  연 이자율
+                  Annual Interest Rate
                 </span>
                 <span className="text-3xl font-bold text-shade-primary">
                   5.0%
@@ -182,11 +182,11 @@ export default function Home() {
       <section className="mx-4 my-12 rounded-3xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/20 px-4 py-20 md:mx-8">
         <div className="mx-auto max-w-5xl text-center">
           <h2 className="mb-6 text-3xl font-bold text-shade-primary md:text-4xl">
-            지금 바로 BTC를 예치하고 이자를 받아보세요
+            Deposit BTC and Earn Interest Now
           </h2>
           <p className="mx-auto mb-10 max-w-3xl text-lg text-shade-secondary">
-            더 이상 기다릴 필요가 없습니다. 지금 예치하고 즉시 이자를
-            받아가세요.
+            Don't wait any longer. Deposit now and claim your interest
+            immediately.
           </p>
           <Button
             label="Get Started"
