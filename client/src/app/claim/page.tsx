@@ -15,18 +15,37 @@ const depositPeriodsDisplayText: Record<DepositPeriod, string> = {
 };
 
 const slotCountMap: Record<DepositPeriod, number> = {
-  "1M": 1 * 30 * 24 * 60 * 60 * 2.5,
-  "3M": 3 * 30 * 24 * 60 * 60 * 2.5,
-  "6M": 6 * 30 * 24 * 60 * 60 * 2.5,
+  "1M": 1,
+  "3M": 3,
+  "6M": 6,
 };
 
+// Calculate optimal APY based on amount
+function calculateOptimalAPY(amount: number) {
+  if (amount <= 10) {
+    // 10M USD (assuming amount is in millions)
+    return 0.2132; // 21.32%
+  } else {
+    const wfragAmount = 10;
+    const fragAmount = amount - 10;
+    return (wfragAmount * 0.2132 + fragAmount * 0.1432) / amount;
+  }
+}
+
+// Calculate minimum risk buffer for full principal protection
+function calculateMinRiskBuffer(currentAPY: number) {
+  const worstCaseAPY = 0.03; // 3%
+  const fixedCommission = 0.2; // 20%
+  return 1 - worstCaseAPY / (currentAPY * (1 - fixedCommission));
+}
+
 export default function ClaimPage() {
-  const [step, setStep] = useState<"amount-and-period" | "commission">(
+  const [step, setStep] = useState<"amount-and-period" | "risk-buffer">(
     "amount-and-period"
   );
   const [depositAmount, setDepositAmount] = useState(1);
   const [depositPeriod, setDepositPeriod] = useState<DepositPeriod>("3M");
-  const [commissionRate, setCommissionRate] = useState(20);
+  const [riskBuffer, setRiskBuffer] = useState(70); // Default to 70%
 
   const astrape = useAstrape();
 
@@ -36,43 +55,78 @@ export default function ClaimPage() {
     setDepositAmount(Math.round(event.target.valueAsNumber * 100) / 100);
   };
 
-  const onChangeCommissionRate = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const onChangeRiskBuffer = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newRate = Math.round(event.target.valueAsNumber * 100) / 100;
-    setCommissionRate(Math.max(20, Math.min(40, newRate)));
+    setRiskBuffer(Math.max(30, Math.min(90, newRate)));
   };
 
   const onClickDeposit = () => {
     astrape.deposit(depositAmount, slotCountMap[depositPeriod]);
   };
 
-  const receiveAmount = useMemo(() => {
-    return (
-      (astrape.poolConfig?.priceFactor || 100_000) *
-      depositAmount *
-      (astrape.poolConfig?.baseInterestRate || 0.1) *
-      (1 - commissionRate / 100)
-    );
-  }, [depositAmount, commissionRate, astrape.poolConfig?.priceFactor]);
+  // Calculate current APY based on deposit amount
+  const currentAPY = useMemo(() => {
+    return calculateOptimalAPY(depositAmount);
+  }, [depositAmount]);
 
-  const maxRisk = useMemo(() => {
-    return (
-      (astrape.poolConfig?.priceFactor || 100_000) *
-      depositAmount *
-      Math.max(
-        0,
-        (astrape.poolConfig?.baseInterestRate || 0.1) *
-          2 *
-          ((40 - commissionRate) / 100)
-      )
-    );
+  // Calculate minimum risk buffer for full protection
+  const minRiskBuffer = useMemo(() => {
+    return calculateMinRiskBuffer(currentAPY);
+  }, [currentAPY]);
+
+  // Calculate conservative APY
+  const conservativeAPY = useMemo(() => {
+    const commissionRate = 0.2; // Fixed 20%
+    return currentAPY * (1 - commissionRate) * (1 - riskBuffer / 100);
+  }, [currentAPY, riskBuffer]);
+
+  // Calculate receive amount (advance interest)
+  const receiveAmount = useMemo(() => {
+    const periodMonths = slotCountMap[depositPeriod];
+    const periodRate = conservativeAPY * (periodMonths / 12);
+    const discountFactor = 1 / (1 + periodRate);
+
+    // Convert to USD (assuming depositAmount is in zBTC)
+    const usdAmount =
+      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
+
+    return usdAmount * periodRate * discountFactor;
   }, [
-    commissionRate,
-    astrape.poolConfig?.priceFactor,
     depositAmount,
-    astrape.poolConfig?.baseInterestRate,
+    conservativeAPY,
+    depositPeriod,
+    astrape.poolConfig?.priceFactor,
   ]);
+
+  // Calculate maximum risk (principal loss in worst case)
+  const maxRisk = useMemo(() => {
+    const periodMonths = slotCountMap[depositPeriod];
+    const worstCaseAPY = 0.03; // 3%
+    const commissionRate = 0.2; // Fixed 20%
+
+    // Convert to USD
+    const usdAmount =
+      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
+
+    // Calculate worst case return
+    const worstCaseReturn = usdAmount * worstCaseAPY * (periodMonths / 12);
+    const netWorstCaseReturn = worstCaseReturn * (1 - commissionRate);
+
+    // Calculate principal loss if advance interest exceeds worst case return
+    return Math.max(0, receiveAmount - netWorstCaseReturn);
+  }, [
+    depositAmount,
+    depositPeriod,
+    receiveAmount,
+    astrape.poolConfig?.priceFactor,
+  ]);
+
+  // Calculate principal protection percentage
+  const principalProtection = useMemo(() => {
+    const usdAmount =
+      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
+    return ((usdAmount - maxRisk) / usdAmount) * 100;
+  }, [depositAmount, maxRisk, astrape.poolConfig?.priceFactor]);
 
   return (
     <main className="page-content">
@@ -82,7 +136,7 @@ export default function ClaimPage() {
         animate={{ opacity: 1 }}
       >
         <Icon name="Claim" />
-        <span>Claim</span>
+        <span>Advance Interest Claim</span>
       </motion.div>
       <div className="page-widget lg:!-mt-6">
         <section>
@@ -90,7 +144,8 @@ export default function ClaimPage() {
           <h1 className="text-4xl font-bold">
             {receiveAmount.toLocaleString()} USDC
           </h1>
-          <div>APY 10%</div>
+          <div>Conservative APY: {(conservativeAPY * 100).toFixed(2)}%</div>
+          <div>Current Optimal APY: {(currentAPY * 100).toFixed(2)}%</div>
         </section>
 
         <div className="flex w-[600px] flex-col gap-4 rounded-t-md bg-white p-4">
@@ -100,16 +155,19 @@ export default function ClaimPage() {
               depositPeriod={depositPeriod}
               setDepositPeriod={setDepositPeriod}
               onChangeDepositAmount={onChangeDepositAmount}
-              onClickNext={() => setStep("commission")}
+              onClickNext={() => setStep("risk-buffer")}
             />
           )}
-          {step === "commission" && (
-            <CommissionStep
-              commissionRate={commissionRate}
-              onChangeCommissionRate={onChangeCommissionRate}
+          {step === "risk-buffer" && (
+            <RiskBufferStep
+              riskBuffer={riskBuffer}
+              minRiskBuffer={minRiskBuffer}
+              onChangeRiskBuffer={onChangeRiskBuffer}
               onClickBack={() => setStep("amount-and-period")}
               onClickDeposit={onClickDeposit}
               maxRisk={maxRisk}
+              principalProtection={principalProtection}
+              conservativeAPY={conservativeAPY}
             />
           )}
         </div>
@@ -141,13 +199,11 @@ function AmountAndPeriodStep({
                 type="number"
                 value={depositAmount}
                 onChange={onChangeDepositAmount}
-                className="w-[36px] appearance-none border-none bg-transparent outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="w-[80px] appearance-none border-none bg-transparent outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
               <h2> zBTC</h2>
             </div>
-            <span>
-              Deposit for {slotCountMap[depositPeriod].toLocaleString()} slots
-            </span>
+            <span>Deposit for {slotCountMap[depositPeriod]} months</span>
           </div>
           <div className="ml-auto flex flex-col">
             <select
@@ -174,7 +230,7 @@ function AmountAndPeriodStep({
         <input
           type="range"
           min={0.01}
-          max={1}
+          max={100}
           color="gray"
           step={0.01}
           value={depositAmount}
@@ -191,36 +247,56 @@ function AmountAndPeriodStep({
   );
 }
 
-function CommissionStep({
-  commissionRate,
-  onChangeCommissionRate,
+function RiskBufferStep({
+  riskBuffer,
+  minRiskBuffer,
+  onChangeRiskBuffer,
   onClickBack,
   onClickDeposit,
   maxRisk,
+  principalProtection,
+  conservativeAPY,
 }: {
-  commissionRate: number;
-  onChangeCommissionRate: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  riskBuffer: number;
+  minRiskBuffer: number;
+  onChangeRiskBuffer: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickBack: () => void;
   onClickDeposit: () => void;
   maxRisk: number;
+  principalProtection: number;
+  conservativeAPY: number;
 }) {
   return (
     <>
       <button onClick={onClickBack}>Back</button>
-      <h1 className="text-2xl font-bold">Adjust Your Risk</h1>
+      <h1 className="text-2xl font-bold">Adjust Your Risk Buffer</h1>
       <span>
-        You can adjust your risk by changing the commission rate. The higher the
-        commission rate, the lower the risk.
+        Commission rate is fixed at 20%. You can adjust your risk by changing
+        the risk buffer. Higher risk buffer = Lower risk, Lower advance
+        interest.
       </span>
-      <h3>Maximum risk: {maxRisk.toLocaleString()} USDC</h3>
+      <div className="flex flex-col gap-2">
+        <div>Risk Buffer: {riskBuffer}%</div>
+        <div>Conservative APY: {(conservativeAPY * 100).toFixed(2)}%</div>
+        <div>Principal Protection: {principalProtection.toFixed(1)}%</div>
+        <div className="text-red-500">
+          Maximum Principal Loss: {maxRisk.toLocaleString()} USDC
+        </div>
+        {riskBuffer < minRiskBuffer && (
+          <div className="text-yellow-500">
+            Warning: Risk buffer below recommended minimum (
+            {minRiskBuffer.toFixed(1)}%) for full principal protection
+          </div>
+        )}
+      </div>
       <div>
         <input
           type="range"
-          min={20}
-          max={40}
+          min={30}
+          max={90}
           step={1}
-          value={commissionRate}
-          onChange={onChangeCommissionRate}
+          value={riskBuffer}
+          onChange={onChangeRiskBuffer}
         />
       </div>
       <button
