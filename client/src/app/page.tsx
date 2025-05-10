@@ -68,105 +68,104 @@ export default function Home() {
   return (
     <main className="w-full">
       {/* 히어로 섹션 */}
-      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 py-24 text-center">
+      <section className="relative overflow-hidden px-20 py-20">
         {/* 배경 효과 */}
         <div className="absolute inset-0 bg-gradient-to-b from-primary-apollo/5 to-transparent" />
         <div className="absolute -right-20 top-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
         <div className="absolute -left-20 bottom-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
 
         {/* 컨텐츠 */}
-        <div className="relative z-10">
-          <h1 className="mb-6 text-4xl font-bold text-shade-primary md:text-6xl">
-            <span className="text-primary-apollo">Deposit BTC</span> & Earn
-            Interest Now
-          </h1>
-          <p className="mb-10 max-w-3xl text-lg text-shade-secondary md:text-xl">
-            Receive immediate interest in USDC for your deposited BTC. Grow your
-            crypto assets in a safe and transparent way.
-          </p>
-          <div className="flex justify-center">
-            <Button
-              label="Get Started"
-              type="primary"
-              size="large"
-              onClick={handleGetStarted}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* 이자 계산기 섹션 */}
-      <section className="bg-white bg-opacity-70 px-4 py-16 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl justify-center">
-          <div className="w-full max-w-md">
-            <h2 className="mb-10 text-center text-3xl font-bold text-shade-primary">
-              Interest Calculator
-            </h2>
-            {/* 금액 선택 */}
-            <div className="mb-8">
-              <div className="mb-2 flex items-center justify-between">
-                <label className="font-medium text-shade-primary">
-                  Deposit Amount
-                </label>
-                <span className="text-xl font-bold text-primary-apollo">
-                  {formatCurrency(amount)}
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
+            {/* 왼쪽: 타이틀과 설명 */}
+            <div className="flex flex-col items-start">
+              <h1 className="mb-12 text-4xl font-bold text-shade-primary md:text-5xl lg:text-6xl">
+                <span className="text-primary-apollo">Deposit BTC</span>
+                <br />
+                <span className="mt-4 inline-block">& Earn Interest Now</span>
+              </h1>
+              <p className="mb-8 text-lg text-shade-secondary md:text-lg">
+                <span>
+                  Receive immediate interest in USDC for your deposited BTC.
                 </span>
-              </div>
-              <input
-                type="range"
-                min="10000"
-                max="1000000"
-                step="10000"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
-                className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-primary-apollo/20"
-              />
-              <div className="mt-1 flex justify-between text-xs text-shade-secondary">
-                <span>$10,000</span>
-                <span>$1,000,000</span>
-              </div>
+                <br />
+                <span>Use now, Pay later.</span>
+              </p>
             </div>
 
-            {/* 기간 선택 */}
-            <div className="mb-8">
-              <label className="mb-2 block font-medium text-shade-primary">
-                Deposit Period
-              </label>
-              <div className="grid grid-cols-3 gap-4">
-                {[1, 3, 6].map((months) => (
-                  <button
-                    key={months}
-                    onClick={() => setPeriod(months)}
-                    className={`rounded-xl border px-4 py-3 ${
-                      period === months
-                        ? "border-primary-apollo bg-primary-apollo text-white"
-                        : "border-primary-apollo/20 bg-white text-shade-primary hover:border-primary-apollo/50"
-                    } font-medium transition-all`}
-                  >
-                    {months} {months === 1 ? "Month" : "Months"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 이자 결과 */}
-            <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-6">
-              <div className="mb-4 text-center">
-                <span className="mb-1 block text-lg text-shade-secondary">
-                  You'll Receive Instantly
-                </span>
-                <span className="text-4xl font-bold text-primary-apollo">
-                  {formatCurrency(interestAmount)}
-                </span>
-                <span className="mt-1 block text-shade-secondary">in USDC</span>
-              </div>
-              <div className="flex justify-center">
-                <Button
-                  label="Start Earning Now"
-                  type="primary"
-                  size="medium"
-                  onClick={handleGetStarted}
+            {/* 오른쪽: 이자 계산기 */}
+            <div className="mx-auto w-full max-w-md rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg md:ml-auto md:mr-0">
+              <h2 className="mb-6 text-center text-2xl font-bold text-shade-primary">
+                Interest Calculator
+              </h2>
+              {/* 금액 선택 */}
+              <div className="mb-6">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="font-medium text-shade-primary">
+                    Deposit Amount
+                  </label>
+                  <span className="text-xl font-bold text-primary-apollo">
+                    {formatCurrency(amount)}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="10000"
+                  max="1000000"
+                  step="10000"
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-primary-apollo/20"
                 />
+                <div className="mt-1 flex justify-between text-xs text-shade-secondary">
+                  <span>$10,000</span>
+                  <span>$1,000,000</span>
+                </div>
+              </div>
+
+              {/* 기간 선택 */}
+              <div className="mb-6">
+                <label className="mb-2 block font-medium text-shade-primary">
+                  Deposit Period
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 3, 6].map((months) => (
+                    <button
+                      key={months}
+                      onClick={() => setPeriod(months)}
+                      className={`rounded-xl border px-3 py-2 text-sm ${
+                        period === months
+                          ? "border-primary-apollo bg-primary-apollo text-white"
+                          : "border-primary-apollo/20 bg-white text-shade-primary hover:border-primary-apollo/50"
+                      } font-medium transition-all`}
+                    >
+                      {months} {months === 1 ? "Month" : "Months"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 이자 결과 */}
+              <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-5">
+                <div className="mb-4 text-center">
+                  <span className="mb-1 block text-shade-secondary">
+                    You'll Receive Instantly
+                  </span>
+                  <span className="text-3xl font-bold text-primary-apollo">
+                    {formatCurrency(interestAmount)}
+                  </span>
+                  <span className="mt-1 block text-shade-secondary">
+                    in USDC
+                  </span>
+                </div>
+                <div className="flex justify-center">
+                  <Button
+                    label="Start Earning Now"
+                    type="primary"
+                    size="medium"
+                    onClick={handleGetStarted}
+                  />
+                </div>
               </div>
             </div>
           </div>
