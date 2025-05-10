@@ -1,10 +1,22 @@
 "use client";
 
 import { motion } from "framer-motion";
-
 import Icon from "@/components/Icons";
 import { useMemo, useState } from "react";
 import { useAstrape } from "@/hooks/astrape/useAstrape";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ComposedChart,
+  ResponsiveContainer,
+} from "recharts";
 
 type DepositPeriod = "1M" | "3M" | "6M";
 
@@ -20,15 +32,15 @@ const slotCountMap: Record<DepositPeriod, number> = {
   "6M": 6,
 };
 
-// Calculate optimal APY based on amount
-function calculateOptimalAPY(amount: number) {
-  if (amount <= 10) {
-    // 10M USD (assuming amount is in millions)
+// Calculate optimal APY based on amount in USD
+function calculateOptimalAPY(usdAmount: number) {
+  if (usdAmount <= 10000000) {
+    // 10M USD
     return 0.2132; // 21.32%
   } else {
-    const wfragAmount = 10;
-    const fragAmount = amount - 10;
-    return (wfragAmount * 0.2132 + fragAmount * 0.1432) / amount;
+    const wfragAmount = 10000000;
+    const fragAmount = usdAmount - 10000000;
+    return (wfragAmount * 0.2132 + fragAmount * 0.1432) / usdAmount;
   }
 }
 
@@ -36,7 +48,10 @@ function calculateOptimalAPY(amount: number) {
 function calculateMinRiskBuffer(currentAPY: number) {
   const worstCaseAPY = 0.03; // 3%
   const fixedCommission = 0.2; // 20%
-  return 1 - worstCaseAPY / (currentAPY * (1 - fixedCommission));
+  return Math.max(
+    0,
+    Math.min(1, 1 - worstCaseAPY / (currentAPY * (1 - fixedCommission)))
+  );
 }
 
 export default function ClaimPage() {
@@ -45,29 +60,34 @@ export default function ClaimPage() {
   );
   const [depositAmount, setDepositAmount] = useState(1);
   const [depositPeriod, setDepositPeriod] = useState<DepositPeriod>("3M");
-  const [riskBuffer, setRiskBuffer] = useState(70); // Default to 70%
+  const [riskBuffer, setRiskBuffer] = useState(0);
 
   const astrape = useAstrape();
 
   const onChangeDepositAmount = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    setDepositAmount(Math.round(event.target.valueAsNumber * 100) / 100);
+    setDepositAmount(Math.round(event.target.valueAsNumber * 1000) / 1000);
   };
 
   const onChangeRiskBuffer = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newRate = Math.round(event.target.valueAsNumber * 100) / 100;
-    setRiskBuffer(Math.max(30, Math.min(90, newRate)));
+    const newRate = Math.round(event.target.valueAsNumber * 10) / 10;
+    setRiskBuffer(newRate);
   };
 
   const onClickDeposit = () => {
     astrape.deposit(depositAmount, slotCountMap[depositPeriod]);
   };
 
-  // Calculate current APY based on deposit amount
+  // Convert to USD
+  const usdAmount = useMemo(() => {
+    return depositAmount * (astrape.poolConfig?.priceFactor || 100000);
+  }, [depositAmount, astrape.poolConfig?.priceFactor]);
+
+  // Calculate current APY based on USD amount
   const currentAPY = useMemo(() => {
-    return calculateOptimalAPY(depositAmount);
-  }, [depositAmount]);
+    return calculateOptimalAPY(usdAmount);
+  }, [usdAmount]);
 
   // Calculate minimum risk buffer for full protection
   const minRiskBuffer = useMemo(() => {
@@ -76,57 +96,78 @@ export default function ClaimPage() {
 
   // Calculate conservative APY
   const conservativeAPY = useMemo(() => {
-    const commissionRate = 0.2; // Fixed 20%
+    const commissionRate = 0.2;
     return currentAPY * (1 - commissionRate) * (1 - riskBuffer / 100);
   }, [currentAPY, riskBuffer]);
 
-  // Calculate receive amount (advance interest)
+  // Calculate receive amount
   const receiveAmount = useMemo(() => {
     const periodMonths = slotCountMap[depositPeriod];
     const periodRate = conservativeAPY * (periodMonths / 12);
     const discountFactor = 1 / (1 + periodRate);
-
-    // Convert to USD (assuming depositAmount is in zBTC)
-    const usdAmount =
-      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
-
     return usdAmount * periodRate * discountFactor;
-  }, [
-    depositAmount,
-    conservativeAPY,
-    depositPeriod,
-    astrape.poolConfig?.priceFactor,
-  ]);
+  }, [usdAmount, conservativeAPY, depositPeriod]);
 
-  // Calculate maximum risk (principal loss in worst case)
-  const maxRisk = useMemo(() => {
+  // Calculate scenario analysis for charts
+  const scenarioAnalysis = useMemo(() => {
     const periodMonths = slotCountMap[depositPeriod];
-    const worstCaseAPY = 0.03; // 3%
-    const commissionRate = 0.2; // Fixed 20%
+    const commissionRate = 0.2;
 
-    // Convert to USD
-    const usdAmount =
-      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
+    const scenarios = [
+      { name: "Worst (3%)", apy: 0.03, color: "#ef4444" },
+      { name: "Bad (10%)", apy: 0.1, color: "#f97316" },
+      { name: "Normal (15%)", apy: 0.15, color: "#22c55e" },
+      { name: "Optimal", apy: currentAPY, color: "#3b82f6" },
+    ];
 
-    // Calculate worst case return
-    const worstCaseReturn = usdAmount * worstCaseAPY * (periodMonths / 12);
-    const netWorstCaseReturn = worstCaseReturn * (1 - commissionRate);
+    return scenarios.map((scenario) => {
+      const grossReturn = usdAmount * scenario.apy * (periodMonths / 12);
+      const netReturn = grossReturn * (1 - commissionRate);
+      const principalLoss = Math.max(0, receiveAmount - netReturn);
+      const finalPrincipal = usdAmount - principalLoss;
+      const additionalInterest = Math.max(0, netReturn - receiveAmount);
 
-    // Calculate principal loss if advance interest exceeds worst case return
-    return Math.max(0, receiveAmount - netWorstCaseReturn);
-  }, [
-    depositAmount,
-    depositPeriod,
-    receiveAmount,
-    astrape.poolConfig?.priceFactor,
-  ]);
+      return {
+        ...scenario,
+        grossReturn,
+        netReturn,
+        principalLoss,
+        finalPrincipal,
+        additionalInterest,
+        protection: (finalPrincipal / usdAmount) * 100,
+      };
+    });
+  }, [usdAmount, depositPeriod, receiveAmount, currentAPY]);
 
-  // Calculate principal protection percentage
-  const principalProtection = useMemo(() => {
-    const usdAmount =
-      depositAmount * (astrape.poolConfig?.priceFactor || 50000);
-    return ((usdAmount - maxRisk) / usdAmount) * 100;
-  }, [depositAmount, maxRisk, astrape.poolConfig?.priceFactor]);
+  // Calculate risk buffer effect data
+  const riskBufferEffectData = useMemo(() => {
+    const maxBuffer = minRiskBuffer * 100;
+    const points = 20;
+    const data = [];
+
+    for (let i = 0; i <= points; i++) {
+      const buffer = (maxBuffer / points) * i;
+      const tempConservativeAPY = currentAPY * 0.8 * (1 - buffer / 100);
+      const periodMonths = slotCountMap[depositPeriod];
+      const periodRate = tempConservativeAPY * (periodMonths / 12);
+      const discountFactor = 1 / (1 + periodRate);
+      const tempReceiveAmount = usdAmount * periodRate * discountFactor;
+
+      // Calculate worst case protection
+      const worstCaseReturn = usdAmount * 0.03 * (periodMonths / 12);
+      const netWorstCase = worstCaseReturn * 0.8;
+      const worstLoss = Math.max(0, tempReceiveAmount - netWorstCase);
+      const worstProtection = ((usdAmount - worstLoss) / usdAmount) * 100;
+
+      data.push({
+        buffer: buffer,
+        advanceInterest: tempReceiveAmount,
+        protection: worstProtection,
+      });
+    }
+
+    return data;
+  }, [currentAPY, minRiskBuffer, usdAmount, depositPeriod]);
 
   return (
     <main className="page-content">
@@ -142,17 +183,21 @@ export default function ClaimPage() {
         <section>
           <h1 className="text-2xl font-bold">Amount you will receive NOW</h1>
           <h1 className="text-4xl font-bold">
-            {receiveAmount.toLocaleString()} USDC
+            $
+            {receiveAmount.toLocaleString(undefined, {
+              maximumFractionDigits: 0,
+            })}{" "}
+            USDC
           </h1>
-          <div>Conservative APY: {(conservativeAPY * 100).toFixed(2)}%</div>
-          <div>Current Optimal APY: {(currentAPY * 100).toFixed(2)}%</div>
+          <div>Target APY: {(conservativeAPY * 100).toFixed(2)}%</div>
         </section>
 
-        <div className="flex w-[600px] flex-col gap-4 rounded-t-md bg-white p-4">
+        <div className="flex w-[800px] flex-col gap-4 rounded-t-md bg-white p-4">
           {step === "amount-and-period" && (
             <AmountAndPeriodStep
               depositAmount={depositAmount}
               depositPeriod={depositPeriod}
+              usdAmount={usdAmount}
               setDepositPeriod={setDepositPeriod}
               onChangeDepositAmount={onChangeDepositAmount}
               onClickNext={() => setStep("risk-buffer")}
@@ -165,9 +210,10 @@ export default function ClaimPage() {
               onChangeRiskBuffer={onChangeRiskBuffer}
               onClickBack={() => setStep("amount-and-period")}
               onClickDeposit={onClickDeposit}
-              maxRisk={maxRisk}
-              principalProtection={principalProtection}
+              scenarioAnalysis={scenarioAnalysis}
+              riskBufferEffectData={riskBufferEffectData}
               conservativeAPY={conservativeAPY}
+              receiveAmount={receiveAmount}
             />
           )}
         </div>
@@ -179,12 +225,14 @@ export default function ClaimPage() {
 function AmountAndPeriodStep({
   depositAmount,
   depositPeriod,
+  usdAmount,
   setDepositPeriod,
   onChangeDepositAmount,
   onClickNext,
 }: {
   depositAmount: number;
   depositPeriod: DepositPeriod;
+  usdAmount: number;
   setDepositPeriod: (period: DepositPeriod) => void;
   onChangeDepositAmount: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickNext: () => void;
@@ -203,6 +251,7 @@ function AmountAndPeriodStep({
               />
               <h2> zBTC</h2>
             </div>
+            <span>≈ ${usdAmount.toLocaleString()} USD</span>
             <span>Deposit for {slotCountMap[depositPeriod]} months</span>
           </div>
           <div className="ml-auto flex flex-col">
@@ -229,10 +278,10 @@ function AmountAndPeriodStep({
         </div>
         <input
           type="range"
-          min={0.01}
-          max={100}
+          min={0.001}
+          max={10}
           color="gray"
-          step={0.01}
+          step={0.001}
           value={depositAmount}
           onChange={onChangeDepositAmount}
         />
@@ -253,57 +302,122 @@ function RiskBufferStep({
   onChangeRiskBuffer,
   onClickBack,
   onClickDeposit,
-  maxRisk,
-  principalProtection,
+  scenarioAnalysis,
+  riskBufferEffectData,
   conservativeAPY,
+  receiveAmount,
 }: {
   riskBuffer: number;
   minRiskBuffer: number;
   onChangeRiskBuffer: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickBack: () => void;
   onClickDeposit: () => void;
-  maxRisk: number;
-  principalProtection: number;
+  scenarioAnalysis: any[];
+  riskBufferEffectData: any[];
   conservativeAPY: number;
+  receiveAmount: number;
 }) {
+  const worstCase = scenarioAnalysis.find((s) => s.name === "Worst (3%)");
+  const maxRiskBuffer = minRiskBuffer * 100;
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded border bg-white p-2 shadow">
+          <p className="text-sm font-semibold">{`${label}%`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {`${entry.dataKey}: ${
+                entry.dataKey === "advanceInterest"
+                  ? `$${entry.value.toLocaleString()}`
+                  : `${entry.value.toFixed(1)}%`
+              }`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <>
-      <button onClick={onClickBack}>Back</button>
+      <button
+        onClick={onClickBack}
+        className="text-blue-500 hover:text-blue-600"
+      >
+        ← Back
+      </button>
       <h1 className="text-2xl font-bold">Adjust Your Risk Buffer</h1>
       <span>
-        Commission rate is fixed at 20%. You can adjust your risk by changing
-        the risk buffer. Higher risk buffer = Lower risk, Lower advance
-        interest.
+        Commission rate is fixed at 20%. Adjust risk buffer to balance between
+        advance interest and principal protection.
       </span>
-      <div className="flex flex-col gap-2">
-        <div>Risk Buffer: {riskBuffer}%</div>
-        <div>Conservative APY: {(conservativeAPY * 100).toFixed(2)}%</div>
-        <div>Principal Protection: {principalProtection.toFixed(1)}%</div>
-        <div className="text-red-500">
-          Maximum Principal Loss: {maxRisk.toLocaleString()} USDC
+
+      <div className="flex flex-col gap-2 rounded bg-gray-100 p-4">
+        <div>Risk Buffer: {riskBuffer.toFixed(1)}%</div>
+        <div>Target APY: {(conservativeAPY * 100).toFixed(2)}%</div>
+        <div>
+          Principal Protection: {(worstCase?.protection || 0).toFixed(1)}%
         </div>
-        {riskBuffer < minRiskBuffer && (
-          <div className="text-yellow-500">
-            Warning: Risk buffer below recommended minimum (
-            {minRiskBuffer.toFixed(1)}%) for full principal protection
+        {riskBuffer >= maxRiskBuffer && (
+          <div className="font-semibold text-green-600">
+            ✓ Principal 100% protected even in worst case (3% APY)
           </div>
         )}
       </div>
-      <div>
+
+      {/* Scenario Analysis Bar Chart */}
+      <div className="mt-6">
+        <h3 className="mb-3 text-lg font-semibold">Scenario Analysis</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={scenarioAnalysis}
+              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip
+                formatter={(value: any, name: string) => {
+                  if (name === "protection") return `${value.toFixed(1)}%`;
+                  return `$${value.toLocaleString()}`;
+                }}
+              />
+              <Legend />
+              <Bar dataKey="netReturn" name="Net Return" fill="#22c55e" />
+              <Bar
+                dataKey="principalLoss"
+                name="Principal Loss"
+                fill="#ef4444"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="mt-6 text-center">
         <input
           type="range"
-          min={30}
-          max={90}
-          step={1}
+          min={0}
+          max={maxRiskBuffer}
+          step={0.1}
           value={riskBuffer}
           onChange={onChangeRiskBuffer}
+          className="w-full"
         />
+        <div className="mt-1 flex justify-between text-xs text-gray-500">
+          <span>0% (Max Risk)</span>
+          <span>{maxRiskBuffer.toFixed(1)}% (Principal Protected)</span>
+        </div>
       </div>
+
       <button
-        className="w-full rounded-md bg-blue-500 p-2 text-white hover:bg-blue-600"
+        className="mt-4 w-full rounded-md bg-blue-500 p-2 text-white hover:bg-blue-600"
         onClick={onClickDeposit}
       >
-        Receive USDC NOW
+        Receive ${receiveAmount.toLocaleString()} USDC NOW
       </button>
     </>
   );
