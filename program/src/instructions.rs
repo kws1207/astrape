@@ -16,6 +16,11 @@ pub enum TokenLockInstruction {
         collateral_mint: Pubkey,
         base_interest_rate: u64,
         price_factor: u64,
+        min_commission_rate: u64,
+        max_commission_rate: u64,
+        min_deposit_amount: u64,
+        max_deposit_amount: u64,
+        deposit_periods: Vec<u64>,
     },
 
     /// Update pool configuration parameters
@@ -29,16 +34,6 @@ pub enum TokenLockInstruction {
         price_factor: Option<u64>,
     },
 
-    /// Deposit collateral tokens and receive interest tokens
-    ///
-    /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` User's collateral token account
-    /// 2. `[writable]` Pool's collateral token account
-    /// 3. `[writable]` User's interest token account
-    /// 4. `[writable]` Pool's interest token account
-    DepositCollateral { unlock_slot: u64 },
-
     /// Admin withdraws collateral for investment
     ///
     /// Accounts expected:
@@ -46,14 +41,6 @@ pub enum TokenLockInstruction {
     /// 1. `[writable]` Admin's collateral token account
     /// 2. `[writable]` Pool's collateral token account
     AdminWithdrawCollateralForInvestment,
-
-    /// Request withdrawal of collateral
-    ///
-    /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` User's interest token account
-    /// 2. `[writable]` Pool's interest token account
-    RequestWithdrawal,
 
     /// Admin updates deposit states based on current slot
     ///
@@ -70,14 +57,6 @@ pub enum TokenLockInstruction {
     /// 3. `[writable]` Pool's collateral token account
     AdminPrepareWithdrawal { user_pubkey: Pubkey },
 
-    /// Withdraw collateral after admin preparation
-    ///
-    /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` User's collateral token account
-    /// 2. `[writable]` Pool's collateral token account
-    WithdrawCollateral,
-
     /// Admin deposits interest tokens to the pool
     ///
     /// Accounts expected:
@@ -93,6 +72,32 @@ pub enum TokenLockInstruction {
     /// 1. `[writable]` Admin's interest token account
     /// 2. `[writable]` Pool's interest token account
     AdminWithdrawInterest { amount: u64 },
+
+    /// Deposit collateral tokens and receive interest tokens
+    ///
+    /// Accounts expected:
+    /// 0. `[writable]` Pool state account
+    /// 1. `[writable]` User's collateral token account
+    /// 2. `[writable]` Pool's collateral token account
+    /// 3. `[writable]` User's interest token account
+    /// 4. `[writable]` Pool's interest token account
+    DepositCollateral { unlock_slot: u64 },
+
+    /// Request withdrawal of collateral
+    ///
+    /// Accounts expected:
+    /// 0. `[writable]` Pool state account
+    /// 1. `[writable]` User's interest token account
+    /// 2. `[writable]` Pool's interest token account
+    RequestWithdrawal,
+
+    /// Withdraw collateral after admin preparation
+    ///
+    /// Accounts expected:
+    /// 0. `[writable]` Pool state account
+    /// 1. `[writable]` User's collateral token account
+    /// 2. `[writable]` Pool's collateral token account
+    WithdrawCollateral,
 }
 
 impl TokenLockInstruction {
@@ -108,12 +113,27 @@ impl TokenLockInstruction {
                 collateral_mint,
                 base_interest_rate,
                 price_factor,
+                min_commission_rate,
+                max_commission_rate,
+                min_deposit_amount,
+                max_deposit_amount,
+                deposit_periods,
             } => {
                 buffer.push(0);
                 buffer.extend_from_slice(&interest_mint.to_bytes());
                 buffer.extend_from_slice(&collateral_mint.to_bytes());
                 buffer.extend_from_slice(&base_interest_rate.to_le_bytes());
                 buffer.extend_from_slice(&price_factor.to_le_bytes());
+                buffer.extend_from_slice(&min_commission_rate.to_le_bytes());
+                buffer.extend_from_slice(&max_commission_rate.to_le_bytes());
+                buffer.extend_from_slice(&min_deposit_amount.to_le_bytes());
+                buffer.extend_from_slice(&max_deposit_amount.to_le_bytes());
+                buffer.extend_from_slice(
+                    &deposit_periods
+                        .iter()
+                        .flat_map(|&x| x.to_le_bytes())
+                        .collect::<Vec<u8>>(),
+                );
             }
             Self::AdminUpdateConfig {
                 param,
@@ -135,33 +155,33 @@ impl TokenLockInstruction {
                     buffer.push(0);
                 }
             }
-            Self::DepositCollateral { unlock_slot } => {
-                buffer.push(2);
-                buffer.extend_from_slice(&unlock_slot.to_le_bytes());
-            }
             Self::AdminWithdrawCollateralForInvestment => {
-                buffer.push(3);
-            }
-            Self::RequestWithdrawal => {
-                buffer.push(4);
+                buffer.push(2);
             }
             Self::AdminUpdateDepositStates => {
-                buffer.push(5);
+                buffer.push(3);
             }
             Self::AdminPrepareWithdrawal { user_pubkey } => {
-                buffer.push(6);
+                buffer.push(4);
                 buffer.extend_from_slice(&user_pubkey.to_bytes());
             }
-            Self::WithdrawCollateral => {
-                buffer.push(7);
-            }
             Self::AdminDepositInterest { amount } => {
-                buffer.push(8);
+                buffer.push(5);
                 buffer.extend_from_slice(&amount.to_le_bytes());
             }
             Self::AdminWithdrawInterest { amount } => {
-                buffer.push(9);
+                buffer.push(6);
                 buffer.extend_from_slice(&amount.to_le_bytes());
+            }
+            Self::DepositCollateral { unlock_slot } => {
+                buffer.push(7);
+                buffer.extend_from_slice(&unlock_slot.to_le_bytes());
+            }
+            Self::RequestWithdrawal => {
+                buffer.push(8);
+            }
+            Self::WithdrawCollateral => {
+                buffer.push(9);
             }
         }
         Ok(buffer)
