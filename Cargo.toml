@@ -1,0 +1,28 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "breakout_contract"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+no-entrypoint = []
+cpi = ["no-entrypoint"]
+
+[dependencies]
+solana-program = "=2.1.15"
+solana-sdk = "=2.1.15"
+spl-token = { version = "=7.0.0", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "=6.0.0", features = ["no-entrypoint"] }
+
+borsh = { version = "1.2.1", features = ["derive", "unstable__schema"] }
+thiserror = "1"
+
+[dev-dependencies]
+solana-program-test = "=2.1.15"
+solana-client = "=2.1.15"
+lazy_static = "1.4.0"
+tokio = { version = "=1.44.0", features = ["full"] }
