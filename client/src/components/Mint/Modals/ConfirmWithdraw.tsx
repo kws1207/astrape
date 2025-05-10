@@ -332,7 +332,7 @@ export default function ConfirmWithdraw({
                   arrowPosition="left-middle"
                 >
                   The Service Fee is deducted from the final received BTC amount
-                  by Orpheus.
+                  by Astrape.
                 </Tooltip>
               </div>
               <span>{serviceFee} zBTC</span>

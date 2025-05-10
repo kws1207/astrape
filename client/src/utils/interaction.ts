@@ -390,7 +390,7 @@ export const getWithdrawalDetailsTableItems = (
       label: {
         label: "Service Fee",
         rightIcon: "InfoSmall",
-        info: "The Service Fee is deducted from the final received BTC amount by Orpheus.",
+        info: "The Service Fee is deducted from the final received BTC amount by Astrape.",
       },
       value: {
         label: `${formatValue(

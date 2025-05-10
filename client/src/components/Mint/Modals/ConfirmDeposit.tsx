@@ -183,7 +183,7 @@ export default function ConfirmDepositModal({
         amount: amount.toString(),
         initiated_at: createdAt,
         current_step_at: createdAt,
-        app_developer: "Orpheus",
+        app_developer: "Astrape",
         miner_fee: minerFee.toString(),
         service_fee: "0",
         steps: [

@@ -17,12 +17,12 @@ import "./design-system.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://orpheus.zeuslayer.dev"),
-  title: "Orpheus",
+  title: "Astrape",
   description:
-    "Orpheus: A Next.js template for Bitcoin applications built on ZeusLayer (zApps)",
+    "Astrape: A Next.js template for Bitcoin applications built on ZeusLayer (zApps)",
   openGraph: {
     images: ["/graphics/metadata-img.jpg"],
-    title: "Orpheus",
+    title: "Astrape",
   },
   twitter: {
     images: ["/graphics/metadata-img.jpg"],
