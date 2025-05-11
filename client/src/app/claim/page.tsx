@@ -112,8 +112,8 @@ export default function ClaimPage() {
 
     const scenarios = [
       { name: "Worst (3%)", apy: 0.03, color: "#ef4444" },
-      { name: "Bad (10%)", apy: 0.1, color: "#f97316" },
-      { name: "Normal (15%)", apy: 0.15, color: "#22c55e" },
+      { name: "Normal (10%)", apy: 0.1, color: "#f97316" },
+      { name: "Good (15%)", apy: 0.15, color: "#22c55e" },
       { name: "Optimal", apy: currentAPY, color: "#3b82f6" },
     ];
 
@@ -154,7 +154,9 @@ export default function ClaimPage() {
             <span>Advance Interest Claim</span>
           </motion.div>
 
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div
+            className={`grid grid-cols-1 gap-8 ${step === "amount-and-period" ? "md:grid-cols-2" : ""}`}
+          >
             {/* Left side: Summary */}
             <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
               <h1 className="mb-2 text-2xl font-bold text-shade-primary">
@@ -420,7 +422,7 @@ function RiskBufferStep({
               />
               <Bar
                 dataKey="principalLoss"
-                name="Principal Loss"
+                name="Principal Loss Risk"
                 fill="#ef4444"
                 radius={[4, 4, 0, 0]}
               />
