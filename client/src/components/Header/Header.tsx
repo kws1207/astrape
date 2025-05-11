@@ -49,7 +49,6 @@ export default function Header() {
                 href={"/"}
                 className={`${styles.nav__icon} ${pathname === "/" ? styles.activeLink : ""}`}
               >
-                <Icon name="Provide" />
                 <span>Home</span>
               </Link>
               <Link

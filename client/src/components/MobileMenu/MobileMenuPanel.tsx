@@ -37,7 +37,6 @@ export default function MobileMenuPanel() {
             closeModal();
           }}
         >
-          <Icon name="Provide" />
           <span className={styles.mobileMenu__link__text}>Home</span>
         </Link>
         <Link
