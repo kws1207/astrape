@@ -309,7 +309,7 @@ export default function DashboardPage() {
                   label="Make Your First Deposit"
                   type="primary"
                   size="medium"
-                  onClick={() => router.push("/claim")}
+                  onClick={() => router.push("/deposit")}
                 />
               </div>
             </div>

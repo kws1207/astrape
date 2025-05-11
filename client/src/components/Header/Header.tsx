@@ -60,11 +60,11 @@ export default function Header() {
                 <span>Mint</span>
               </Link>
               <Link
-                href="/claim"
-                className={`${styles.nav__icon} ${pathname === "/claim" ? styles.activeLink : ""}`}
+                href="/deposit"
+                className={`${styles.nav__icon} ${pathname === "/deposit" ? styles.activeLink : ""}`}
               >
                 <Icon name="Claim" />
-                <span>Claim</span>
+                <span>Deposit</span>
               </Link>
               <Link
                 href="/dashboard"

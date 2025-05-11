@@ -51,7 +51,7 @@ function calculateMinRiskBuffer(currentAPY: number) {
   );
 }
 
-export default function ClaimPage() {
+export default function DepositPage() {
   const [step, setStep] = useState<"amount-and-period" | "risk-buffer">(
     "amount-and-period"
   );
@@ -76,28 +76,23 @@ export default function ClaimPage() {
     astrape.deposit(depositAmount, slotCountMap[depositPeriod]);
   };
 
-  // Convert to USD
   const usdAmount = useMemo(() => {
     return depositAmount * (astrape.poolConfig?.priceFactor || 100000);
   }, [depositAmount, astrape.poolConfig?.priceFactor]);
 
-  // Calculate current APY based on USD amount
   const currentAPY = useMemo(() => {
     return calculateOptimalAPY(usdAmount);
   }, [usdAmount]);
 
-  // Calculate minimum risk buffer for full protection
   const minRiskBuffer = useMemo(() => {
     return calculateMinRiskBuffer(currentAPY);
   }, [currentAPY]);
 
-  // Calculate conservative APY
   const conservativeAPY = useMemo(() => {
     const commissionRate = 0.2;
     return currentAPY * (1 - commissionRate) * (1 - riskBuffer / 100);
   }, [currentAPY, riskBuffer]);
 
-  // Calculate receive amount
   const receiveAmount = useMemo(() => {
     const periodMonths = slotCountMap[depositPeriod];
     const periodRate = conservativeAPY * (periodMonths / 12);
@@ -105,7 +100,6 @@ export default function ClaimPage() {
     return usdAmount * periodRate * discountFactor;
   }, [usdAmount, conservativeAPY, depositPeriod]);
 
-  // Calculate scenario analysis for charts
   const scenarioAnalysis = useMemo(() => {
     const periodMonths = slotCountMap[depositPeriod];
     const commissionRate = 0.2;
@@ -139,7 +133,6 @@ export default function ClaimPage() {
   return (
     <main className="w-full overflow-hidden">
       <div className="relative px-4 py-12 md:px-20 md:py-16">
-        {/* Background effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-primary-apollo/5 to-transparent" />
         <div className="absolute -right-20 top-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
         <div className="absolute -left-20 bottom-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
@@ -157,7 +150,6 @@ export default function ClaimPage() {
           <div
             className={`grid grid-cols-1 gap-8 ${step === "amount-and-period" ? "md:grid-cols-2" : ""}`}
           >
-            {/* Left side: Summary */}
             <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
               <h1 className="mb-2 text-2xl font-bold text-shade-primary">
                 Amount you will receive NOW
@@ -177,7 +169,6 @@ export default function ClaimPage() {
               </div>
             </div>
 
-            {/* Right side: Form */}
             <div className="flex flex-col gap-4 rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
               {step === "amount-and-period" && (
                 <AmountAndPeriodStep
