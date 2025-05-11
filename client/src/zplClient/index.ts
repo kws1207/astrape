@@ -43,9 +43,9 @@ export class ZplClient {
     this.assetMint = new PublicKey(assetMint);
 
     // Set Astrape program ID
-    if (process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_ADDRESS_BASE58) {
+    if (process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58) {
       this.astrapeProgramId = new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_ADDRESS_BASE58
+        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
       );
     } else {
       // throw new Error("Astrape program address is not set");
@@ -224,6 +224,10 @@ export class ZplClient {
 
   async getPoolConfig() {
     return this.rpcClient.getPoolConfig();
+  }
+
+  async getUserDeposit() {
+    return this.rpcClient.getUserDeposit();
   }
 
   // Added methods for Astrape functionality

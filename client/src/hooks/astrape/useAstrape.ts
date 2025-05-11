@@ -19,6 +19,14 @@ export function useAstrape() {
     }
   );
 
+  const { data: userDeposit, mutate: mutateUserDeposit } = useSWR(
+    zplClient ? "userDeposit" : null,
+    async () => {
+      const deposit = await zplClient?.getUserDeposit();
+      return deposit;
+    }
+  );
+
   const deposit = useCallback(
     async (amount: number, unlockSlot: number) => {
       if (!zplClient) {
@@ -31,7 +39,8 @@ export function useAstrape() {
       }
 
       const astrapeProgramId = new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_ADDRESS_BASE58 || ""
+        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58 ||
+          ""
       );
 
       const poolStateAccount = await zplClient.getPoolStateAccount();
@@ -62,5 +71,5 @@ export function useAstrape() {
     [zplClient]
   );
 
-  return { poolConfig, deposit };
+  return { poolConfig, deposit, userDeposit, mutateUserDeposit };
 }

@@ -403,7 +403,7 @@ function RiskBufferStep({
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip
-                formatter={(value: any, name: string) => {
+                formatter={(value: number, name: string) => {
                   if (name === "protection") return `${value.toFixed(1)}%`;
                   return `$${value.toLocaleString()}`;
                 }}

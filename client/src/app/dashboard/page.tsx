@@ -1,202 +1,321 @@
 "use client";
 
+import { useAstrape } from "@/hooks/astrape/useAstrape";
 import { motion } from "framer-motion";
-import { useState } from "react";
-
-import DashboardCharts from "@/components/DashboardCharts";
-import Tabs from "@/components/Tabs/Tabs";
-import useDashboardCharts from "@/hooks/hermes/useDashboardCharts";
-import useDashboardStats from "@/hooks/hermes/useDashboardStats";
-import useTwoWayPegGuardianSettings from "@/hooks/hermes/useTwoWayPegGuardianSettings";
-import usePrice from "@/hooks/misc/usePrice";
-import { ChartDataPoint } from "@/types/chart";
-import { fillChartData } from "@/utils/chart";
-import { BTC_DECIMALS } from "@/utils/constant";
-
-const timelineTabs = [
-  { label: "Day" },
-  { label: "Week" },
-  { label: "Month" },
-  { label: "Year" },
-  { label: "All" },
-];
-
-const timelineTabsMobile = [
-  { label: "D" },
-  { label: "W" },
-  { label: "M" },
-  { label: "Y" },
-  { label: "All" },
-];
-
-const defaultChartData = [{ date: new Date("2024-04-04"), value: 0 }];
+import { UserDepositState } from "@/types/astrape";
+import Icon from "@/components/Icons";
+import Button from "@/components/Button/Button";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
-  const [selectedTimelineTab, setSelectedTimelineTab] = useState(
-    timelineTabs.indexOf(timelineTabs[4])
-  );
-  const { price: btcPrice } = usePrice("BTCUSDC");
-  const { data: twoWayPegGuardianSettings } = useTwoWayPegGuardianSettings();
-  const { data: statsData, isLoading: isStatsLoading } = useDashboardStats(
-    twoWayPegGuardianSettings.map((item) => item.address)
-  );
-  const { data: chartsData, isLoading: isChartsLoading } = useDashboardCharts(
-    twoWayPegGuardianSettings.map((item) => item.address)
-  );
+  const { userDeposit } = useAstrape();
+  const router = useRouter();
 
-  const isLoading = isStatsLoading || isChartsLoading;
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
 
-  const recentDayHourlyHotReserveBucketsChartData: ChartDataPoint[] = chartsData
-    ? fillChartData(
-        chartsData.recentDayHourlyHotReserveBucketsChartData,
-        24,
-        "hour"
-      )
-    : defaultChartData;
+  const getStateLabel = (state: UserDepositState) => {
+    switch (state) {
+      case UserDepositState.Deposited:
+        return "Active";
+      case UserDepositState.WithdrawRequested:
+        return "Withdrawal Requested";
+      case UserDepositState.WithdrawReady:
+        return "Ready to Withdraw";
+      default:
+        return "Unknown";
+    }
+  };
 
-  const recentWeekDailyHotReserveBucketsChartData: ChartDataPoint[] = chartsData
-    ? fillChartData(
-        chartsData.recentWeekDailyHotReserveBucketsChartData,
-        7,
-        "day"
-      )
-    : defaultChartData;
+  const getStateColor = (state: UserDepositState) => {
+    switch (state) {
+      case UserDepositState.Deposited:
+        return "text-green-600";
+      case UserDepositState.WithdrawRequested:
+        return "text-yellow-600";
+      case UserDepositState.WithdrawReady:
+        return "text-primary-apollo";
+      default:
+        return "text-gray-600";
+    }
+  };
 
-  const recentMonthDailyHotReserveBucketsChartData: ChartDataPoint[] =
-    chartsData
-      ? fillChartData(
-          chartsData.recentMonthDailyHotReserveBucketsChartData,
-          31,
-          "day"
-        )
-      : defaultChartData;
+  const getRemainingTime = (unlockSlot: number, depositSlot: number) => {
+    const currentSlot =
+      depositSlot + Math.floor((Date.now() / 1000 - depositSlot) * 0.4);
+    const remainingSlots = Math.max(0, unlockSlot - currentSlot);
+    const remainingDays = Math.ceil(remainingSlots / (2 * 60 * 24));
 
-  const allWeeklyHotReserveBucketsChartData: ChartDataPoint[] =
-    chartsData?.allWeeklyHotReserveBucketsChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: data.value,
-    })) ?? defaultChartData;
-
-  const recentDayHourlyVolumeChartData: ChartDataPoint[] = chartsData
-    ? fillChartData(
-        chartsData.recentDayHourlyVolumeChartData,
-        24,
-        "hour",
-        btcPrice
-      )
-    : defaultChartData;
-
-  const recentWeekDailyVolumeData: ChartDataPoint[] = chartsData
-    ? fillChartData(
-        chartsData.recentWeekDailyVolumeChartData,
-        7,
-        "day",
-        btcPrice
-      )
-    : defaultChartData;
-
-  const recentMonthDailyVolumeData: ChartDataPoint[] = chartsData
-    ? fillChartData(
-        chartsData.recentMonthDailyVolumeChartData,
-        31,
-        "day",
-        btcPrice
-      )
-    : defaultChartData;
-
-  const allWeeklyVolumeChartData: ChartDataPoint[] =
-    chartsData?.allWeeklyVolumeChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: (data.value / 10 ** BTC_DECIMALS) * btcPrice,
-    })) ?? defaultChartData;
-
-  const recentDayHourlyAmountChartData: ChartDataPoint[] =
-    chartsData?.recentDayHourlyAmountChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: (data.value / 10 ** BTC_DECIMALS) * btcPrice,
-    })) ?? defaultChartData;
-
-  const recentWeekDailyAmountChartData: ChartDataPoint[] =
-    chartsData?.recentWeekDailyAmountChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: (data.value / 10 ** BTC_DECIMALS) * btcPrice,
-    })) ?? defaultChartData;
-
-  const recentMonthDailyAmountChartData: ChartDataPoint[] =
-    chartsData?.recentMonthDailyAmountChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: (data.value / 10 ** BTC_DECIMALS) * btcPrice,
-    })) ?? defaultChartData;
-
-  const allWeeklyAmountChartData: ChartDataPoint[] =
-    chartsData?.allWeeklyAmountChartData.map((data) => ({
-      date: new Date(data.time * 1000),
-      value: (data.value / 10 ** BTC_DECIMALS) * btcPrice,
-    })) ?? defaultChartData;
-
-  const tvl = recentWeekDailyAmountChartData.at(-1)?.value ?? 0;
-
-  const handleSetSelectedTimelineTab = (index: number) => {
-    setSelectedTimelineTab(index);
+    return `${remainingDays} days`;
   };
 
   return (
     <main className="page-content ds">
       <motion.div
-        className="md:px-apollo-10 mt-32 flex flex-col gap-y-6 sm:flex-row sm:items-center sm:justify-between sm:gap-y-16 md:mt-48"
+        className="container mx-auto px-4 py-8 md:px-8 md:py-12"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
       >
-        <span className="text-sys-color-text-primary text-2xl ">
-          <b>Dashboard</b>
-        </span>
-        <Tabs
-          className="!hidden sm:!flex"
-          type="timeline"
-          activeTab={selectedTimelineTab}
-          tabs={timelineTabs}
-          setActiveTab={handleSetSelectedTimelineTab}
-          layoutName="timeline-tab"
-        />
-        <Tabs
-          className="!flex sm:!hidden"
-          type="timeline"
-          activeTab={selectedTimelineTab}
-          tabs={timelineTabsMobile}
-          setActiveTab={handleSetSelectedTimelineTab}
-          layoutName="timeline-tab-mobile"
-        />
-      </motion.div>
+        <div className="mb-8 flex items-center justify-start pt-[36px]">
+          <h1 className="text-2xl font-bold text-shade-primary md:text-3xl">
+            Your Deposits
+          </h1>
+        </div>
 
-      <DashboardCharts
-        showHourlyTimestamps={selectedTimelineTab === 0}
-        isLoading={isLoading}
-        btcPrice={btcPrice}
-        selectedTimeline={selectedTimelineTab}
-        tvl={tvl}
-        totalVolume={statsData ? statsData.totalVolume * btcPrice : 0}
-        uniqueWallets={statsData?.totalUniqueWallets ?? 0}
-        recentDayHourlyHotReserveBucketsChartData={
-          recentDayHourlyHotReserveBucketsChartData
-        }
-        recentWeekDailyHotReserveBucketsChartData={
-          recentWeekDailyHotReserveBucketsChartData
-        }
-        recentMonthDailyHotReserveBucketsChartData={
-          recentMonthDailyHotReserveBucketsChartData
-        }
-        allWeeklyHotReserveBucketsChartData={
-          allWeeklyHotReserveBucketsChartData
-        }
-        recentDayHourlyVolumeChartData={recentDayHourlyVolumeChartData}
-        recentWeekDailyVolumeChartData={recentWeekDailyVolumeData}
-        recentMonthDailyVolumeChartData={recentMonthDailyVolumeData}
-        allWeeklyVolumeChartData={allWeeklyVolumeChartData}
-        recentDayHourlyAmountChartData={recentDayHourlyAmountChartData}
-        recentWeekDailyAmountChartData={recentWeekDailyAmountChartData}
-        recentMonthDailyAmountChartData={recentMonthDailyAmountChartData}
-        allWeeklyAmountChartData={allWeeklyAmountChartData}
-      />
+        {userDeposit ? (
+          <div className="grid gap-8 md:grid-cols-3">
+            {/* Main deposit card */}
+            <div className="md:col-span-2">
+              <div className="overflow-hidden rounded-2xl border border-primary-apollo/10 bg-white shadow-lg">
+                {/* Card header */}
+                <div className="bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-6">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-shade-primary md:text-xl">
+                      Deposit Details
+                    </h2>
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${getStateColor(userDeposit.state)} bg-current bg-opacity-10`}
+                    >
+                      {getStateLabel(userDeposit.state)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
+                      <div>
+                        <span className="text-sm text-shade-secondary">
+                          Amount Deposited
+                        </span>
+                        <p className="text-xl font-bold text-shade-primary">
+                          {formatCurrency(userDeposit.amount)}
+                        </p>
+                      </div>
+                      <div className="hidden h-10 w-px bg-primary-apollo/10 md:block"></div>
+                      <div>
+                        <span className="text-sm text-shade-secondary">
+                          Interest Received
+                        </span>
+                        <p className="text-xl font-bold text-green-600">
+                          {formatCurrency(userDeposit.interestReceived)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card body */}
+                <div className="p-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-1 flex items-center gap-2">
+                          <Icon
+                            name="Clock"
+                            size={14}
+                            className="text-primary-apollo"
+                          />
+                          <span className="text-sm font-medium text-shade-secondary">
+                            Deposit Date
+                          </span>
+                        </div>
+                        <p className="text-base font-medium text-shade-primary">
+                          {new Date(
+                            userDeposit.depositSlot * 1000
+                          ).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 flex items-center gap-2">
+                          <Icon
+                            name="Clock"
+                            size={14}
+                            className="text-primary-apollo"
+                          />
+                          <span className="text-sm font-medium text-shade-secondary">
+                            Unlock Date
+                          </span>
+                        </div>
+                        <p className="text-base font-medium text-shade-primary">
+                          {new Date(
+                            userDeposit.unlockSlot * 1000
+                          ).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-1 flex items-center gap-2">
+                          <Icon
+                            name="Withdraw02"
+                            size={14}
+                            className="text-primary-apollo"
+                          />
+                          <span className="text-sm font-medium text-shade-secondary">
+                            Commission Rate
+                          </span>
+                        </div>
+                        <p className="text-base font-medium text-shade-primary">
+                          {(userDeposit.commissionRate / 10000).toFixed(2)}%
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Icon
+                              name="Clock"
+                              size={14}
+                              className="text-primary-apollo"
+                            />
+                            <span className="text-sm font-medium text-shade-secondary">
+                              Time until unlock
+                            </span>
+                          </div>
+                          <span className="text-sm font-medium text-primary-apollo">
+                            {getRemainingTime(
+                              userDeposit.unlockSlot,
+                              userDeposit.depositSlot
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-full rounded-full bg-primary-apollo transition-all duration-1000"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                ((Date.now() / 1000 - userDeposit.depositSlot) /
+                                  (userDeposit.unlockSlot -
+                                    userDeposit.depositSlot)) *
+                                  100
+                              )}%`,
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-wrap items-center gap-4">
+                    {userDeposit.state === UserDepositState.Deposited && (
+                      <Button
+                        label="Request Withdrawal"
+                        type="secondary"
+                        size="medium"
+                      />
+                    )}
+
+                    {userDeposit.state === UserDepositState.WithdrawReady && (
+                      <Button
+                        label="Withdraw Now"
+                        type="primary"
+                        size="medium"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary card */}
+            <div>
+              <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
+                <h2 className="mb-4 text-lg font-semibold text-shade-primary">
+                  Summary
+                </h2>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
+                    <span className="text-shade-secondary">Principal</span>
+                    <span className="font-medium text-shade-primary">
+                      {formatCurrency(userDeposit.amount)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
+                    <span className="text-shade-secondary">Interest</span>
+                    <span className="font-medium text-green-600">
+                      {formatCurrency(userDeposit.interestReceived)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
+                    <span className="text-shade-secondary">Commission</span>
+                    <span className="font-medium text-shade-primary">
+                      {(userDeposit.commissionRate / 10000).toFixed(2)}%
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
+                    <span className="text-shade-secondary">Status</span>
+                    <span
+                      className={`font-medium ${getStateColor(userDeposit.state)}`}
+                    >
+                      {getStateLabel(userDeposit.state)}
+                    </span>
+                  </div>
+
+                  <div className="mt-6 rounded-xl bg-primary-apollo/5 p-4 text-center">
+                    <span className="block text-sm text-shade-secondary">
+                      Total Value
+                    </span>
+                    <span className="text-2xl font-bold text-shade-primary">
+                      {formatCurrency(
+                        userDeposit.amount + userDeposit.interestReceived
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-primary-apollo/10 bg-white p-8 shadow-lg">
+            <div className="max-w-md text-center">
+              <div className="mb-6 flex justify-center">
+                <div className="rounded-full bg-primary-apollo/10 p-4">
+                  <Icon
+                    name="Portfolio"
+                    size={18}
+                    className="text-primary-apollo"
+                  />
+                </div>
+              </div>
+              <h2 className="mb-3 text-xl font-semibold text-shade-primary">
+                No Deposits Found
+              </h2>
+              <p className="mb-8 text-shade-secondary">
+                You haven&apos;t made any deposits yet. Start earning by making
+                your first deposit now.
+              </p>
+              <div className="flex justify-center">
+                <Button
+                  label="Make Your First Deposit"
+                  type="primary"
+                  size="medium"
+                  onClick={() => router.push("/claim")}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </motion.div>
     </main>
   );
 }

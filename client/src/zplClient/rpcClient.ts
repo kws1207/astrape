@@ -7,7 +7,11 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { deserializePoolConfig } from "../types/astrape";
+import {
+  deserializePoolConfig,
+  deserializePoolState,
+  UserDepositState,
+} from "../types/astrape";
 
 export class RpcClient {
   constructor(
@@ -63,7 +67,9 @@ export class RpcClient {
   }
 
   async getPoolConfig() {
-    if (!process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_ADDRESS_BASE58) {
+    if (
+      !process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
+    ) {
       // throw new Error("Astrape program address is not set");
       return {
         admin: new PublicKey("11111111111111111111111111111111"),
@@ -80,7 +86,9 @@ export class RpcClient {
     }
 
     const astrapeAccount = await this.connection.getAccountInfo(
-      new PublicKey(process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_ADDRESS_BASE58)
+      new PublicKey(
+        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
+      )
     );
 
     if (!astrapeAccount?.data)
@@ -89,5 +97,31 @@ export class RpcClient {
     const poolConfig = deserializePoolConfig(astrapeAccount.data);
 
     return poolConfig;
+  }
+
+  async getUserDeposit() {
+    if (!this.walletPublicKey) throw new Error("Wallet is not connected");
+    if (!process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_STATE_ACCOUNT_ADDRESS_BASE58) {
+      // throw new Error("Astrape program address is not set");
+      return {
+        amount: 0,
+        depositSlot: 0,
+        unlockSlot: 0,
+        interestReceived: 0,
+        state: UserDepositState.Deposited,
+        commissionRate: 0,
+      };
+    }
+    const deposits = await this.connection.getAccountInfo(
+      new PublicKey(
+        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_STATE_ACCOUNT_ADDRESS_BASE58
+      )
+    );
+
+    if (!deposits?.data) throw new Error("Failed to fetch user deposit");
+
+    const depositsData = deserializePoolState(deposits.data);
+
+    return depositsData.deposits.get(this.walletPublicKey.toBase58());
   }
 }
