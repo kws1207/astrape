@@ -25,13 +25,13 @@ const getStateLabel = (state: UserDepositState) => {
 const getStateColor = (state: UserDepositState) => {
   switch (state) {
     case UserDepositState.Deposited:
-      return "text-green-600";
+      return "green-600";
     case UserDepositState.WithdrawRequested:
-      return "text-yellow-600";
+      return "yellow-600";
     case UserDepositState.WithdrawReady:
-      return "text-primary-apollo";
+      return "primary-apollo";
     default:
-      return "text-gray-600";
+      return "gray-600";
   }
 };
 
@@ -110,7 +110,9 @@ const DepositSummary = ({ userDeposit }: { userDeposit: UserDeposit }) => (
 
       <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
         <span className="text-shade-secondary">Status</span>
-        <span className={`font-medium ${getStateColor(userDeposit.state)}`}>
+        <span
+          className={`font-medium text-${getStateColor(userDeposit.state)}`}
+        >
           {getStateLabel(userDeposit.state)}
         </span>
       </div>
@@ -133,7 +135,7 @@ const DepositDetails = ({ userDeposit }: { userDeposit: UserDeposit }) => (
         Deposit Details
       </h2>
       <span
-        className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${getStateColor(userDeposit.state)} bg-current bg-opacity-10`}
+        className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-${getStateColor(userDeposit.state)} text-white`}
       >
         {getStateLabel(userDeposit.state)}
       </span>
@@ -390,29 +392,6 @@ const EarlyWithdrawalInfo = ({
             USDC
           </span>
         </div>
-      </div>
-
-      <div className="rounded-md border border-yellow-200 bg-yellow-50 p-4">
-        <h5 className="mb-2 text-sm font-medium text-yellow-800">
-          Important Information
-        </h5>
-        <ul className="list-disc space-y-2 pl-4 text-xs text-yellow-700">
-          <li>
-            Early withdrawals require you to return a portion of your earned
-            USDC interest
-          </li>
-          <li>
-            The refund amount is calculated based on remaining time until the
-            unlock date
-          </li>
-          <li>
-            You must have sufficient USDC in your wallet to process this
-            transaction
-          </li>
-          <li>
-            The exact refund amount will be calculated at transaction time
-          </li>
-        </ul>
       </div>
     </div>
 
