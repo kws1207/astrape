@@ -38,43 +38,25 @@ export default function MobileMenuPanel() {
           }}
         >
           <Icon name="Provide" />
-          <span className={styles.mobileMenu__link__text}>Mint</span>
+          <span className={styles.mobileMenu__link__text}>Home</span>
         </Link>
-        <div
-          className={`${styles.mobileMenu__link} ${styles.nav__icon} ${pathname === "/portfolio" || pathname === "/portfolio/transactions" ? styles.activeLink : ""}`}
+        <Link
+          href={"/mint"}
+          className={`${styles.mobileMenu__link} ${pathname === "/mint" ? styles.activeLink : ""}`}
           onClick={() => {
             closeModal();
           }}
         >
-          <div className="flex flex-col gap-y-2">
-            <div className="flex items-center space-x-2">
-              <Icon name="Portfolio" />
-              <span className={styles.mobileMenu__link__text}>Portfolio</span>
-            </div>
-
-            <div className="flex flex-col px-4">
-              <Link
-                href="/portfolio"
-                className="p-2 text-shade-secondary hover:text-shade-primary"
-              >
-                Overview
-              </Link>
-              <Link
-                href="/portfolio/transactions"
-                className="p-2 text-shade-secondary hover:text-shade-primary"
-              >
-                Transactions
-              </Link>
-            </div>
-          </div>
-        </div>
+          <Icon name="Provide" />
+          <span className={styles.mobileMenu__link__text}>Mint</span>
+        </Link>
         <Link
-          href="/claim"
-          className={`${styles.mobileMenu__link} ${pathname === "/claim" ? styles.activeLink : ""} relative`}
+          href="/deposit"
+          className={`${styles.mobileMenu__link} ${pathname === "/deposit" ? styles.activeLink : ""} relative`}
           onClick={closeModal}
         >
           <Icon name="Claim" />
-          <span className={styles.mobileMenu__link__text}>Claim</span>
+          <span className={styles.mobileMenu__link__text}>Deposit</span>
         </Link>
         <Link
           href="/dashboard"
