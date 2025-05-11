@@ -8,12 +8,16 @@ pub enum TokenLockInstruction {
     /// Accounts expected:
     /// 0. `[signer]` Admin account
     /// 1. `[writable]` Config PDA account
-    /// 2. `[writable]` State PDA account
-    /// 3. `[]` System program
-    /// 4. `[]` Token program
-    /// 5. `[]` Associated Token Account program
-    /// 6. `[writable]` Interest pool ATA account
-    /// 7. `[writable]` Collateral pool ATA account
+    /// 2. `[writable]` Authority PDA account
+    /// 3. `[writable]` Interest pool ATA account
+    /// 4. `[writable]` Collateral pool ATA account
+    /// 5. `[writable]` Withdrawal pool account
+    /// 6. `[]` Interest mint account
+    /// 7. `[]` Collateral mint account
+    /// 8. `[]` System program
+    /// 9. `[]` Token program
+    /// 10. `[]` Associated Token Account program
+    /// 11. `[]` Rent sysvar
     Initialize {
         interest_mint: Pubkey,
         collateral_mint: Pubkey,
@@ -45,68 +49,102 @@ pub enum TokenLockInstruction {
     /// Admin withdraws collateral for investment
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` Admin's collateral token account
-    /// 2. `[writable]` Pool's collateral token account
+    /// 0. `[signer]` Admin account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` Admin's collateral token account
+    /// 4. `[writable]` Pool's collateral token account
+    /// 5. `[]` System program
+    /// 6. `[]` Token program
+    /// 7. `[]` Associated Token Account program
     AdminWithdrawCollateralForInvestment,
-
-    /// Admin updates deposit states based on current slot
-    ///
-    /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    AdminUpdateDepositStates,
 
     /// Admin prepares withdrawal by depositing collateral
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` Admin's collateral token account
-    /// 2. `[writable]` User's collateral token account
-    /// 3. `[writable]` Pool's collateral token account
-    AdminPrepareWithdrawal { user_pubkey: Pubkey },
+    /// 0. `[signer]` Admin account
+    /// 1. `[]` Config PDA account
+    /// 2. `[writable]` Admin's collateral token account
+    /// 3. `[writable]` Withdrawal pool account
+    /// 4. `[]` User account
+    /// 5. `[writable]` User deposit account
+    /// 6. `[]` Token program
+    AdminPrepareWithdrawal,
 
     /// Admin deposits interest tokens to the pool
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` Admin's interest token account
-    /// 2. `[writable]` Pool's interest token account
+    /// 0. `[signer]` Admin account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` Admin's interest token account
+    /// 4. `[writable]` Pool's interest token account
+    /// 5. `[]` System program
+    /// 6. `[]` Token program
+    /// 7. `[]` Associated Token Account program
     AdminDepositInterest { amount: u64 },
 
     /// Admin withdraws interest tokens from the pool
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` Admin's interest token account
-    /// 2. `[writable]` Pool's interest token account
+    /// 0. `[signer]` Admin account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` Admin's interest token account
+    /// 4. `[writable]` Pool's interest token account
+    /// 5. `[]` System program
+    /// 6. `[]` Token program
+    /// 7. `[]` Associated Token Account program
     AdminWithdrawInterest { amount: u64 },
 
     /// Deposit collateral tokens into the pool
     ///
     /// Accounts expected:
-    /// 0. `[]` Config PDA account
-    /// 1. `[writable]` State PDA account
-    /// 2. `[signer]` User's token account
-    /// 3. `[writable]` Pool's token account
-    /// 4. `[writable]` Interest pool account
-    /// 5. `[writable]` User's interest token account
-    /// 6. `[]` Clock sysvar
-    DepositCollateral { amount: u64, unlock_slot: u64 },
+    /// 0. `[signer]` User account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` User's collateral token account
+    /// 4. `[writable]` User's deposit account
+    /// 5. `[writable]` Pool's collateral token account
+    /// 6. `[writable]` User's interest token account
+    /// 7. `[writable]` Pool's interest token account
+    /// 8. `[]` System program
+    /// 9. `[]` Token program
+    DepositCollateral {
+        amount: u64,
+        deposit_period: u64,
+        commission_rate: u64,
+    },
 
-    /// Request withdrawal of collateral
+    /// Request early withdrawal of collateral (before unlock time)
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` User's interest token account
-    /// 2. `[writable]` Pool's interest token account
+    /// 0. `[signer]` User account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` User's deposit account
+    /// 4. `[writable]` User's interest token account
+    /// 5. `[writable]` Pool's interest token account
+    /// 6. `[]` Token program
+    RequestWithdrawalEarly,
+
+    /// Request withdrawal of collateral (after unlock time)
+    ///
+    /// Accounts expected:
+    /// 0. `[signer]` User account
+    /// 1. `[writable]` User's deposit account
     RequestWithdrawal,
 
     /// Withdraw collateral after admin preparation
     ///
     /// Accounts expected:
-    /// 0. `[writable]` Pool state account
-    /// 1. `[writable]` User's collateral token account
-    /// 2. `[writable]` Pool's collateral token account
+    /// 0. `[signer]` User account
+    /// 1. `[]` Config PDA account
+    /// 2. `[]` Authority PDA account
+    /// 3. `[writable]` User's deposit account
+    /// 4. `[writable]` User's collateral token account
+    /// 5. `[writable]` Withdrawal pool account
+    /// 6. `[]` Token program
     WithdrawCollateral,
 }
 
@@ -208,28 +246,29 @@ impl TokenLockInstruction {
             Self::AdminWithdrawCollateralForInvestment => {
                 buffer.push(2);
             }
-            Self::AdminUpdateDepositStates => {
+            Self::AdminPrepareWithdrawal => {
                 buffer.push(3);
             }
-            Self::AdminPrepareWithdrawal { user_pubkey } => {
-                buffer.push(4);
-                buffer.extend_from_slice(&user_pubkey.to_bytes());
-            }
             Self::AdminDepositInterest { amount } => {
-                buffer.push(5);
+                buffer.push(4);
                 buffer.extend_from_slice(&amount.to_le_bytes());
             }
             Self::AdminWithdrawInterest { amount } => {
-                buffer.push(6);
+                buffer.push(5);
                 buffer.extend_from_slice(&amount.to_le_bytes());
             }
             Self::DepositCollateral {
                 amount,
-                unlock_slot,
+                deposit_period,
+                commission_rate: comminsion_rate,
             } => {
-                buffer.push(7);
+                buffer.push(6);
                 buffer.extend_from_slice(&amount.to_le_bytes());
-                buffer.extend_from_slice(&unlock_slot.to_le_bytes());
+                buffer.extend_from_slice(&deposit_period.to_le_bytes());
+                buffer.extend_from_slice(&comminsion_rate.to_le_bytes());
+            }
+            Self::RequestWithdrawalEarly => {
+                buffer.push(7);
             }
             Self::RequestWithdrawal => {
                 buffer.push(8);

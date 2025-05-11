@@ -33,6 +33,12 @@ pub enum TokenLockError {
     #[error("Account not initialized")]
     AccountNotInitialized,
 
+    #[error("Deposit is not yet unlocked: slot={0}, unlock_slot={1}")]
+    NotUnlockedYet(u64, u64),
+
+    #[error("User deposit already exists")]
+    UserDepositAlreadyExists,
+
     // Operation errors
     #[error("Invalid lock period: {0}")]
     InvalidLockPeriod(u64),
@@ -40,11 +46,11 @@ pub enum TokenLockError {
     #[error("Invalid configuration parameter: {0}")]
     InvalidConfigParam(u8),
 
-    #[error("Amount below minimum: {0}")]
-    AmountBelowMinimum(u64),
+    #[error("Deposit amount out of bounds: {0}")]
+    DepositAmountOutOfBounds(u64),
 
-    #[error("Amount exceeds maximum: {0}")]
-    AmountExceedsMaximum(u64),
+    #[error("Commission rate out of bounds: {0}")]
+    CommissionRateOutOfBounds(u64),
 
     #[error("Value out of range: {0}")]
     ValueOutOfRange(u64),
@@ -106,22 +112,24 @@ impl From<TokenLockError> for ProgramError {
             TokenLockError::InvalidPDA(_) => 6,
             TokenLockError::AccountAlreadyInitialized => 7,
             TokenLockError::AccountNotInitialized => 8,
-            TokenLockError::InvalidLockPeriod(_) => 9,
-            TokenLockError::InvalidConfigParam(_) => 10,
-            TokenLockError::AmountBelowMinimum(_) => 11,
-            TokenLockError::AmountExceedsMaximum(_) => 12,
-            TokenLockError::ValueOutOfRange(_) => 13,
-            TokenLockError::InsufficientBalance(_) => 14,
-            TokenLockError::InsufficientPoolBalance(_) => 15,
-            TokenLockError::InsufficientInterestBalance(_) => 16,
-            TokenLockError::NoDepositFound => 17,
-            TokenLockError::InvalidDepositState(_, _) => 18,
-            TokenLockError::OperationNotAllowed(_) => 19,
-            TokenLockError::LockPeriodNotExpired => 20,
-            TokenLockError::ArithmeticOverflow => 21,
-            TokenLockError::DivisionByZero => 22,
-            TokenLockError::InvalidInput => 23,
-            TokenLockError::Unexpected => 24,
+            TokenLockError::NotUnlockedYet(_, _) => 9,
+            TokenLockError::UserDepositAlreadyExists => 10,
+            TokenLockError::InvalidLockPeriod(_) => 11,
+            TokenLockError::InvalidConfigParam(_) => 12,
+            TokenLockError::DepositAmountOutOfBounds(_) => 13,
+            TokenLockError::CommissionRateOutOfBounds(_) => 14,
+            TokenLockError::ValueOutOfRange(_) => 15,
+            TokenLockError::InsufficientBalance(_) => 16,
+            TokenLockError::InsufficientPoolBalance(_) => 17,
+            TokenLockError::InsufficientInterestBalance(_) => 18,
+            TokenLockError::NoDepositFound => 19,
+            TokenLockError::InvalidDepositState(_, _) => 20,
+            TokenLockError::OperationNotAllowed(_) => 21,
+            TokenLockError::LockPeriodNotExpired => 22,
+            TokenLockError::ArithmeticOverflow => 23,
+            TokenLockError::DivisionByZero => 24,
+            TokenLockError::InvalidInput => 25,
+            TokenLockError::Unexpected => 26,
         };
 
         ProgramError::Custom(TOKEN_LOCK_ERROR_CODE_BASE + error_code)

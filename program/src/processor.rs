@@ -12,23 +12,18 @@ use solana_program::{
 };
 use spl_associated_token_account::instruction as ata_instruction;
 use spl_token::{instruction as token_instruction, state::Account as TokenAccount};
-use std::collections::HashMap;
-use std::mem::size_of;
 
 use crate::{
     errors::{TokenLockError, TokenLockResult},
     instructions::TokenLockInstruction,
-    state::{PoolConfig, PoolState, UserDeposit, UserDepositState},
+    state::{AstrapeConfig, UserDeposit, UserDepositState},
 };
 
 // PDA seeds
 const CONFIG_SEED: &[u8] = b"pool_config";
 const STATE_SEED: &[u8] = b"pool_state";
 const AUTHORITY_SEED: &[u8] = b"authority";
-
-// Unused seeds (can be removed)
-const _INTEREST_POOL_SEED: &[u8] = b"interest_pool";
-const _COLLATERAL_POOL_SEED: &[u8] = b"collateral_pool";
+const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
 
 #[cfg(feature = "testnet")]
 pub mod config_feature {
@@ -114,13 +109,9 @@ impl Processor {
                 msg!("Instruction: AdminWithdrawCollateralForInvestment");
                 Self::process_admin_withdraw_collateral_for_investment(program_id, accounts)
             }
-            TokenLockInstruction::AdminUpdateDepositStates => {
-                msg!("Instruction: AdminUpdateDepositStates");
-                Self::process_admin_update_deposit_states(program_id, accounts)
-            }
-            TokenLockInstruction::AdminPrepareWithdrawal { user_pubkey } => {
+            TokenLockInstruction::AdminPrepareWithdrawal => {
                 msg!("Instruction: AdminPrepareWithdrawal");
-                Self::process_admin_prepare_withdrawal(program_id, accounts, user_pubkey)
+                Self::process_admin_prepare_withdrawal(program_id, accounts)
             }
             TokenLockInstruction::AdminDepositInterest { amount } => {
                 msg!("Instruction: AdminDepositInterest");
@@ -132,10 +123,21 @@ impl Processor {
             }
             TokenLockInstruction::DepositCollateral {
                 amount,
-                unlock_slot,
+                deposit_period,
+                commission_rate,
             } => {
                 msg!("Instruction: DepositCollateral");
-                Self::process_deposit_collateral(program_id, accounts, amount, unlock_slot)
+                Self::process_deposit_collateral(
+                    program_id,
+                    accounts,
+                    amount,
+                    deposit_period,
+                    commission_rate,
+                )
+            }
+            TokenLockInstruction::RequestWithdrawalEarly => {
+                msg!("Instruction: RequestWithdrawalEarly");
+                Self::process_request_withdrawal_early(program_id, accounts)
             }
             TokenLockInstruction::RequestWithdrawal => {
                 msg!("Instruction: RequestWithdrawal");
@@ -148,28 +150,76 @@ impl Processor {
         }
     }
 
-    fn find_pool_accounts(
+    fn check_pda(
+        name: &str,
+        pda: &Pubkey,
+        seeds: &[&[u8]],
         program_id: &Pubkey,
-        interest_mint: &Pubkey,
-        collateral_mint: &Pubkey,
-    ) -> (Pubkey, Pubkey) {
-        // Find the authority PDA that will own the token accounts
-        let (authority_key, _) = Pubkey::find_program_address(&[AUTHORITY_SEED], program_id);
-
-        // Use the authority PDA as the owner of the token accounts
-        let interest_pool = spl_associated_token_account::get_associated_token_address(
-            &authority_key,
-            interest_mint,
-        );
-        let collateral_pool = spl_associated_token_account::get_associated_token_address(
-            &authority_key,
-            collateral_mint,
-        );
-        (interest_pool, collateral_pool)
+    ) -> Result<u8, TokenLockError> {
+        let (expected_pda, bump) = Pubkey::find_program_address(seeds, program_id);
+        if expected_pda != *pda {
+            msg!(
+                "Invalid PDA for {}: expected={}, actual={}",
+                name,
+                expected_pda,
+                pda
+            );
+            return Err(TokenLockError::InvalidPDA(1).into());
+        }
+        Ok(bump)
     }
 
-    fn find_state_account(program_id: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&[STATE_SEED], program_id)
+    fn check_ata(
+        name: &str,
+        ata: &Pubkey,
+        wallet: &Pubkey,
+        mint: &Pubkey,
+    ) -> Result<(), TokenLockError> {
+        let expected_ata = spl_associated_token_account::get_associated_token_address(wallet, mint);
+        if expected_ata != *ata {
+            msg!(
+                "Invalid ATA for {}: expected={}, actual={}",
+                name,
+                expected_ata,
+                ata
+            );
+            return Err(TokenLockError::InvalidPDA(1).into());
+        }
+        Ok(())
+    }
+
+    fn calculate_interest_amount(
+        amount: u64,
+        commission_rate: u64,
+        deposit_period: u64,
+        config: &AstrapeConfig,
+    ) -> u64 {
+        amount / 100
+    }
+
+    fn calculate_interest_to_return(
+        amount: u64,
+        deposit_slot: u64,
+        unlock_slot: u64,
+        current_slot: u64,
+    ) -> Result<u64, TokenLockError> {
+        // Calculate remaining interest to be returned based on actual lock duration
+        let actual_lock_duration = current_slot - deposit_slot;
+        let total_lock_duration = unlock_slot - deposit_slot;
+
+        let interest_to_return = match (amount as u128).checked_mul(actual_lock_duration as u128) {
+            Some(v) => v,
+            None => return Err(TokenLockError::ArithmeticOverflow.into()),
+        };
+
+        let interest_to_return = match interest_to_return.checked_div(total_lock_duration as u128) {
+            Some(v) => v,
+            None => {
+                return Err(TokenLockError::DivisionByZero.into());
+            }
+        } as u64;
+
+        Ok(interest_to_return)
     }
 
     fn process_initialize(
@@ -185,59 +235,65 @@ impl Processor {
         max_deposit_amount: u64,
         deposit_periods: Vec<u64>,
     ) -> ProgramResult {
-        // Log the number of accounts provided
-        msg!("Number of accounts in initialize: {}", accounts.len());
-
         let account_info_iter = &mut accounts.iter();
         let admin_info = next_account_info(account_info_iter)?;
-        msg!("Admin account: {}", admin_info.key);
-
         let config_info = next_account_info(account_info_iter)?;
-        msg!("Config account: {}", config_info.key);
-
-        let state_info = next_account_info(account_info_iter)?;
-        msg!("State account: {}", state_info.key);
-
-        let system_program_info = next_account_info(account_info_iter)?;
-        msg!("System program account: {}", system_program_info.key);
-
-        let token_program_info = next_account_info(account_info_iter)?;
-        msg!("Token program account: {}", token_program_info.key);
-
-        let ata_program_info = next_account_info(account_info_iter)?;
-        msg!("ATA program account: {}", ata_program_info.key);
-
+        let authority_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
-        msg!("Interest pool account: {}", interest_pool_account.key);
-
         let collateral_pool_account = next_account_info(account_info_iter)?;
-        msg!("Collateral pool account: {}", collateral_pool_account.key);
-
+        let withdrawal_pool_account = next_account_info(account_info_iter)?;
         let interest_mint_account = next_account_info(account_info_iter)?;
-        msg!("Interest mint account: {}", interest_mint_account.key);
-
         let collateral_mint_account = next_account_info(account_info_iter)?;
-        msg!("Collateral mint account: {}", collateral_mint_account.key);
-
-        let program_account = next_account_info(account_info_iter)?;
-        msg!("Program account: {}", program_account.key);
-
-        // Find authority PDA
-        let (authority_key, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], program_id);
-        msg!("Expected authority PDA: {}", authority_key);
-
-        // We don't need the authority account passed in explicitly
+        let system_program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+        let ata_program_info = next_account_info(account_info_iter)?;
+        let rent_account_info = next_account_info(account_info_iter)?;
 
         // Verify admin
         if !admin_info.is_signer {
+            //|| config_feature::admin::id() != *admin_info.key {
             msg!("Admin must be a signer");
             return Err(TokenLockError::SignerRequired.into());
         }
 
-        let _admin = *admin_info.key;
+        // Verify PDAs
+        // 1. authority PDA
+        let authority_bump = Self::check_pda(
+            "authority",
+            authority_account.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
 
-        // Verify system program
+        // 2. config PDA
+        let config_bump = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+
+        // 3. interest pool PDA
+        Self::check_ata(
+            "interest pool",
+            interest_pool_account.key,
+            authority_account.key,
+            &interest_mint,
+        )?;
+
+        // 4. collateral pool PDA
+        Self::check_ata(
+            "collateral pool",
+            collateral_pool_account.key,
+            authority_account.key,
+            &collateral_mint,
+        )?;
+
+        // 5. withdrawal pool PDA
+        let withdrawal_pool_bump = Self::check_pda(
+            "withdrawal pool",
+            withdrawal_pool_account.key,
+            &[WITHDRAWAL_POOL_SEED],
+            program_id,
+        )?;
+
+        // Verify programs
+        // 1. system program
         if *system_program_info.key != solana_program::system_program::id() {
             msg!(
                 "Invalid system program: expected={}, actual={}",
@@ -247,7 +303,7 @@ impl Processor {
             return Err(TokenLockError::InvalidAccountOwner.into());
         }
 
-        // Verify token program
+        // 2. token program
         if *token_program_info.key != spl_token::id() {
             msg!(
                 "Invalid token program: expected={}, actual={}",
@@ -257,7 +313,7 @@ impl Processor {
             return Err(TokenLockError::InvalidAccountOwner.into());
         }
 
-        // Verify ATA program
+        // 3. ATA program
         if *ata_program_info.key != spl_associated_token_account::id() {
             msg!(
                 "Invalid ATA program: expected={}, actual={}",
@@ -267,53 +323,9 @@ impl Processor {
             return Err(TokenLockError::InvalidAccountOwner.into());
         }
 
-        // Verify config PDA
-        let (config_pda, config_bump) = Pubkey::find_program_address(&[CONFIG_SEED], program_id);
-        if config_pda != *config_info.key {
-            msg!(
-                "Invalid config PDA: expected={}, actual={}",
-                config_pda,
-                config_info.key
-            );
-            return Err(TokenLockError::InvalidPDA(1).into());
-        }
-
-        // Verify state PDA
-        let (state_pda, state_bump) = Self::find_state_account(program_id);
-        if state_pda != *state_info.key {
-            msg!(
-                "Invalid state PDA: expected={}, actual={}",
-                state_pda,
-                state_info.key
-            );
-            return TokenLockError::InvalidPDA(2).log_and_return();
-        }
-
-        // Verify pool accounts are ATAs
-        let (expected_interest_pool, expected_collateral_pool) =
-            Self::find_pool_accounts(program_id, &interest_mint, &collateral_mint);
-        if *interest_pool_account.key != expected_interest_pool {
-            msg!(
-                "Invalid interest pool account: expected={}, actual={}",
-                expected_interest_pool,
-                interest_pool_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(1).into());
-        }
-        if *collateral_pool_account.key != expected_collateral_pool {
-            msg!(
-                "Invalid collateral pool account: expected={}, actual={}",
-                expected_collateral_pool,
-                collateral_pool_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(2).into());
-        }
-
         // Check if accounts are already initialized
-        if config_info.owner != system_program_info.key
-            || state_info.owner != system_program_info.key
-        {
-            return Err(TokenLockError::InvalidPoolAccount(3).into());
+        if config_info.owner != system_program_info.key {
+            return Err(TokenLockError::AccountAlreadyInitialized.into());
         }
 
         // Validate configuration parameters
@@ -330,10 +342,29 @@ impl Processor {
             return Err(TokenLockError::ValueOutOfRange(0).into());
         }
 
+        let rent = Rent::get()?;
+        // Initialize authority account
+        let authority_signer_seeds: &[&[_]] = &[AUTHORITY_SEED, &[authority_bump]];
+        invoke_signed(
+            &system_instruction::create_account(
+                admin_info.key,
+                authority_account.key,
+                rent.minimum_balance(0),
+                0,
+                program_id,
+            ),
+            &[
+                admin_info.clone(),
+                authority_account.clone(),
+                system_program_info.clone(),
+            ],
+            &[authority_signer_seeds],
+        )?;
+
         // Initialize config account
         let config_signer_seeds: &[&[_]] = &[CONFIG_SEED, &[config_bump]];
-        let rent = Rent::get()?;
-        let config_size = size_of::<PoolConfig>();
+        let config_size = AstrapeConfig::LEN;
+        msg!("Config size: {}", config_size);
         let config_lamports = rent.minimum_balance(config_size).max(1);
 
         invoke_signed(
@@ -352,39 +383,18 @@ impl Processor {
             &[config_signer_seeds],
         )?;
 
-        // Initialize state account
-        let state_signer_seeds: &[&[_]] = &[STATE_SEED, &[state_bump]];
-        let state_size = size_of::<PoolState>();
-        let state_lamports = rent.minimum_balance(state_size).max(1);
-
-        invoke_signed(
-            &system_instruction::create_account(
-                admin_info.key,
-                state_info.key,
-                state_lamports,
-                state_size as u64,
-                program_id,
-            ),
-            &[
-                admin_info.clone(),
-                state_info.clone(),
-                system_program_info.clone(),
-            ],
-            &[state_signer_seeds],
-        )?;
-
         // Create interest pool ATA - the ATA will be owned by the authority PDA
         invoke(
             &ata_instruction::create_associated_token_account(
-                admin_info.key,   // Payer
-                program_id,       // Owner of the new account (the program itself)
-                &interest_mint,   // Mint
-                &spl_token::id(), // Token program ID
+                admin_info.key,        // Payer
+                authority_account.key, // Owner of the new account (authority PDA)
+                &interest_mint,        // Mint
+                &spl_token::id(),      // Token program ID
             ),
             &[
                 admin_info.clone(),            // Payer
                 interest_pool_account.clone(), // Associated token account
-                program_account.clone(),       // Program account as the owner
+                authority_account.clone(),     // Owner of the new account (authority PDA)
                 interest_mint_account.clone(), // Mint account
                 system_program_info.clone(),   // System program
                 token_program_info.clone(),    // Token program
@@ -395,15 +405,15 @@ impl Processor {
         // Create collateral pool ATA - the ATA will be owned by the authority PDA
         invoke(
             &ata_instruction::create_associated_token_account(
-                admin_info.key,   // Payer
-                program_id,       // Owner of the new account (the program itself)
-                &collateral_mint, // Mint
-                &spl_token::id(), // Token program ID
+                admin_info.key,        // Payer
+                authority_account.key, // Owner of the new account (authority PDA)
+                &collateral_mint,      // Mint
+                &spl_token::id(),      // Token program ID
             ),
             &[
                 admin_info.clone(),              // Payer
                 collateral_pool_account.clone(), // Associated token account
-                program_account.clone(),         // Program account as the owner
+                authority_account.clone(),       // Owner of the new account (authority PDA)
                 collateral_mint_account.clone(), // Mint account
                 system_program_info.clone(),     // System program
                 token_program_info.clone(),      // Token program
@@ -411,8 +421,45 @@ impl Processor {
             ],
         )?;
 
+        // create withdrawal pool account and initialize token account
+        let token_account_size = TokenAccount::LEN;
+        let token_account_lamports = rent.minimum_balance(token_account_size).max(1);
+        let withdrawal_pool_signer_seeds: &[&[_]] =
+            &[WITHDRAWAL_POOL_SEED, &[withdrawal_pool_bump]];
+        invoke_signed(
+            &system_instruction::create_account(
+                admin_info.key,
+                withdrawal_pool_account.key,
+                token_account_lamports,
+                token_account_size as u64,
+                token_program_info.key,
+            ),
+            &[
+                admin_info.clone(),
+                withdrawal_pool_account.clone(),
+                authority_account.clone(),
+                system_program_info.clone(),
+            ],
+            &[withdrawal_pool_signer_seeds],
+        )?;
+        invoke(
+            &token_instruction::initialize_account(
+                &spl_token::id(),
+                withdrawal_pool_account.key,
+                collateral_mint_account.key,
+                authority_account.key,
+            )?,
+            &[
+                withdrawal_pool_account.clone(),
+                collateral_mint_account.clone(),
+                authority_account.clone(),
+                rent_account_info.clone(),
+            ],
+            // &[withdrawal_pool_signer_seeds],
+        )?;
+
         // Initialize config with provided values
-        let config = PoolConfig {
+        let config = AstrapeConfig {
             interest_mint,
             collateral_mint,
             base_interest_rate,
@@ -423,13 +470,9 @@ impl Processor {
             max_deposit_amount,
             deposit_period: deposit_periods,
         };
-        config.serialize(&mut *config_info.data.borrow_mut())?;
-
-        // Initialize state
-        let state = PoolState {
-            deposits: HashMap::new(),
-        };
-        state.serialize(&mut *state_info.data.borrow_mut())?;
+        let mut config_data = config_info.data.borrow_mut();
+        let mut dst = &mut config_data[..];
+        config.serialize(&mut dst)?;
 
         Ok(())
     }
@@ -457,19 +500,10 @@ impl Processor {
         }
 
         // Verify config PDA
-        let (pda, _) = Pubkey::find_program_address(&[CONFIG_SEED], program_id);
-        if pda != *config_info.key || config_info.owner != program_id {
-            msg!(
-                "Invalid config account: expected={}, actual={}, owner={}",
-                pda,
-                config_info.key,
-                config_info.owner
-            );
-            return Err(TokenLockError::InvalidPDA(1).into());
-        }
+        let _config_bump = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
 
         // Update config based on parameter
-        let mut config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
+        let mut config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
         match param {
             0 => {
                 if let Some(rate) = base_interest_rate {
@@ -559,19 +593,22 @@ impl Processor {
             }
         }
 
-        config.serialize(&mut *config_info.data.borrow_mut())?;
+        let mut config_data = config_info.data.borrow_mut();
+        let mut dst = &mut config_data[..];
+        config.serialize(&mut dst)?;
         Ok(())
     }
 
     fn process_admin_withdraw_collateral_for_investment(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         accounts: &[AccountInfo],
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let admin_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
         let admin_token_account = next_account_info(account_info_iter)?;
-        let pool_token_account = next_account_info(account_info_iter)?;
+        let collateral_pool_account = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
         let ata_program_info = next_account_info(account_info_iter)?;
@@ -581,7 +618,22 @@ impl Processor {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
-        let config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let authority_bump = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
+
+        let config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
+
+        let _ = Self::check_ata(
+            "collateral pool",
+            collateral_pool_account.key,
+            authority_info.key,
+            &config.collateral_mint,
+        )?;
 
         // Create admin's ATA if it doesn't exist
         if admin_token_account.data_is_empty() {
@@ -603,77 +655,45 @@ impl Processor {
         }
 
         // Get pool's collateral balance
-        let amount = TokenAccount::unpack(&pool_token_account.data.borrow())?.amount;
+        let amount = TokenAccount::unpack(&collateral_pool_account.data.borrow())?.amount;
         if amount == 0 {
             return Err(TokenLockError::InsufficientPoolBalance(0))
                 .with_context("Insufficient pool balance");
         }
 
-        // Find pool authority PDA
-        let (authority_key, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], _program_id);
-
         // Transfer collateral to admin
         invoke_signed(
             &token_instruction::transfer(
                 &spl_token::id(),
-                pool_token_account.key,
+                collateral_pool_account.key,
                 admin_token_account.key,
-                &authority_key,
+                authority_info.key,
                 &[],
                 amount,
             )?,
-            &[pool_token_account.clone(), admin_token_account.clone()],
+            &[
+                authority_info.clone(),
+                collateral_pool_account.clone(),
+                admin_token_account.clone(),
+            ],
             &[&[AUTHORITY_SEED, &[authority_bump]]],
         )?;
 
         Ok(())
     }
 
-    fn process_admin_update_deposit_states(
-        _program_id: &Pubkey,
-        accounts: &[AccountInfo],
-    ) -> ProgramResult {
-        let account_info_iter = &mut accounts.iter();
-        let admin_info = next_account_info(account_info_iter)?;
-        let state_info = next_account_info(account_info_iter)?;
-
-        // Verify admin
-        // For testing purposes, just verify the signer
-        if !admin_info.is_signer {
-            return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
-        }
-
-        let mut state = PoolState::try_from_slice(&state_info.data.borrow())?;
-        let clock = Clock::get()?;
-
-        // Update states for deposits that have reached their unlock slot
-        for (_, deposit) in state.deposits.iter_mut() {
-            if deposit.state == UserDepositState::Deposited && deposit.unlock_slot <= clock.slot {
-                deposit.state = UserDepositState::WithdrawRequested;
-            }
-        }
-
-        state.serialize(&mut *state_info.data.borrow_mut())?;
-
-        Ok(())
-    }
-
     fn process_admin_prepare_withdrawal(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         accounts: &[AccountInfo],
-        user_pubkey: Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let admin_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
-        let state_info = next_account_info(account_info_iter)?;
         let admin_token_account = next_account_info(account_info_iter)?;
-        let _user_token_account = next_account_info(account_info_iter)?;
-        let pool_token_account = next_account_info(account_info_iter)?;
-        let system_program_info = next_account_info(account_info_iter)?;
+        let withdrawal_pool_account = next_account_info(account_info_iter)?;
+        let user_info = next_account_info(account_info_iter)?;
+        let user_deposit_account = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
-        let ata_program_info = next_account_info(account_info_iter)?;
 
         // Verify admin
         // For testing purposes, just verify the signer
@@ -681,33 +701,22 @@ impl Processor {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
-        let config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
-        let mut state = PoolState::try_from_slice(&state_info.data.borrow())?;
-
-        // Create admin's ATA if it doesn't exist
-        if admin_token_account.data_is_empty() {
-            invoke(
-                &ata_instruction::create_associated_token_account(
-                    admin_info.key,
-                    admin_info.key,
-                    &config.collateral_mint,
-                    &spl_token::id(),
-                ),
-                &[
-                    admin_info.clone(),
-                    admin_token_account.clone(),
-                    system_program_info.clone(),
-                    token_program_info.clone(),
-                    ata_program_info.clone(),
-                ],
-            )?;
-        }
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let _ = Self::check_pda(
+            "withdrawal pool",
+            withdrawal_pool_account.key,
+            &[WITHDRAWAL_POOL_SEED],
+            program_id,
+        )?;
+        let _ = Self::check_pda(
+            "user deposit",
+            user_deposit_account.key,
+            &[user_info.key.as_ref()],
+            program_id,
+        )?;
 
         // Find user's deposit
-        let deposit = state
-            .deposits
-            .get(&user_pubkey)
-            .ok_or(TokenLockError::NoDepositFound)?;
+        let mut deposit = UserDeposit::try_from_slice(&user_deposit_account.data.borrow())?;
 
         // Verify deposit state
         if deposit.state != UserDepositState::WithdrawRequested {
@@ -721,47 +730,41 @@ impl Processor {
             return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
         }
 
-        // Transfer collateral from admin to pool
+        // Transfer collateral from admin to withdrawal pool (not the main pool)
         invoke(
             &token_instruction::transfer(
                 &spl_token::id(),
                 admin_token_account.key,
-                pool_token_account.key,
-                &admin_token_account.key,
+                withdrawal_pool_account.key,
+                admin_info.key,
                 &[],
                 deposit.amount,
             )?,
             &[
                 admin_token_account.clone(),
-                pool_token_account.clone(),
-                admin_token_account.clone(),
+                withdrawal_pool_account.clone(),
+                admin_info.clone(),
             ],
         )?;
 
         // Update deposit state
-        let updated_deposit = UserDeposit {
-            amount: deposit.amount,
-            deposit_slot: deposit.deposit_slot,
-            unlock_slot: deposit.unlock_slot,
-            interest_received: deposit.interest_received,
-            state: UserDepositState::WithdrawReady,
-            commission_rate: deposit.commission_rate,
-        };
-        state.deposits.insert(user_pubkey, updated_deposit);
-
-        state.serialize(&mut *state_info.data.borrow_mut())?;
+        deposit.state = UserDepositState::WithdrawReady;
+        let mut user_deposit_data = user_deposit_account.data.borrow_mut();
+        let mut dst = &mut user_deposit_data[..];
+        deposit.serialize(&mut dst)?;
 
         Ok(())
     }
 
     fn process_admin_deposit_interest(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         accounts: &[AccountInfo],
         amount: u64,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let admin_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
         let admin_interest_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
@@ -774,51 +777,34 @@ impl Processor {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
-        let config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let _ = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
 
-        // Create admin's ATA if it doesn't exist
-        if admin_interest_account.data_is_empty() {
-            invoke(
-                &ata_instruction::create_associated_token_account(
-                    admin_info.key,
-                    admin_info.key,
-                    &config.interest_mint,
-                    &spl_token::id(),
-                ),
-                &[
-                    admin_info.clone(),
-                    admin_interest_account.clone(),
-                    system_program_info.clone(),
-                    token_program_info.clone(),
-                    ata_program_info.clone(),
-                ],
-            )?;
-        }
+        let config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
 
-        // Verify pool account is ATA
-        let (expected_interest_pool, _) =
-            Self::find_pool_accounts(_program_id, &config.interest_mint, &config.collateral_mint);
-        if *interest_pool_account.key != expected_interest_pool {
-            msg!(
-                "Invalid interest pool account: expected={}, actual={}",
-                expected_interest_pool,
-                interest_pool_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(1).into());
-        }
-
+        Self::check_ata(
+            "interest pool",
+            interest_pool_account.key,
+            authority_info.key,
+            &config.interest_mint,
+        )?;
         // Transfer interest to pool
         invoke(
             &token_instruction::transfer(
                 &spl_token::id(),
                 admin_interest_account.key,
                 interest_pool_account.key,
-                &admin_interest_account.key,
+                &admin_info.key,
                 &[],
                 amount,
             )?,
             &[
-                admin_interest_account.clone(),
+                admin_info.clone(),
                 interest_pool_account.clone(),
                 admin_interest_account.clone(),
             ],
@@ -828,13 +814,14 @@ impl Processor {
     }
 
     fn process_admin_withdraw_interest(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         accounts: &[AccountInfo],
         amount: u64,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let admin_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
         let admin_interest_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
@@ -847,7 +834,28 @@ impl Processor {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
-        let config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let authority_bump = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
+
+        let config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
+
+        Self::check_ata(
+            "admin interest",
+            admin_interest_account.key,
+            admin_info.key,
+            &config.interest_mint,
+        )?;
+        Self::check_ata(
+            "interest pool",
+            interest_pool_account.key,
+            authority_info.key,
+            &config.interest_mint,
+        )?;
 
         // Create admin's ATA if it doesn't exist
         if admin_interest_account.data_is_empty() {
@@ -868,33 +876,18 @@ impl Processor {
             )?;
         }
 
-        // Verify pool account is ATA
-        let (expected_interest_pool, _) =
-            Self::find_pool_accounts(_program_id, &config.interest_mint, &config.collateral_mint);
-        if *interest_pool_account.key != expected_interest_pool {
-            msg!(
-                "Invalid interest pool account: expected={}, actual={}",
-                expected_interest_pool,
-                interest_pool_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(1).into());
-        }
-
-        // Find pool authority PDA
-        let (authority_key, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], _program_id);
-
         // Transfer interest from pool to admin
         invoke_signed(
             &token_instruction::transfer(
                 &spl_token::id(),
                 interest_pool_account.key,
                 admin_interest_account.key,
-                &authority_key,
+                &authority_info.key,
                 &[],
                 amount,
             )?,
             &[
+                authority_info.clone(),
                 interest_pool_account.clone(),
                 admin_interest_account.clone(),
             ],
@@ -908,151 +901,123 @@ impl Processor {
         program_id: &Pubkey,
         accounts: &[AccountInfo],
         amount: u64,
-        unlock_slot: u64,
+        deposit_period: u64,
+        commission_rate: u64,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let user_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
-        let state_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
         let user_token_account = next_account_info(account_info_iter)?;
-        let pool_token_account = next_account_info(account_info_iter)?;
+        let user_deposit_account = next_account_info(account_info_iter)?;
+        let collateral_pool_account = next_account_info(account_info_iter)?;
         let user_interest_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
 
-        let config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
-        let mut state = PoolState::try_from_slice(&state_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let authority_bump = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
+        let user_deposit_bump = Self::check_pda(
+            "user deposit",
+            user_deposit_account.key,
+            &[user_info.key.as_ref()],
+            program_id,
+        )?;
+
+        let config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
+
+        Self::check_ata(
+            "interest pool",
+            interest_pool_account.key,
+            authority_info.key,
+            &config.interest_mint,
+        )?;
+
+        Self::check_ata(
+            "collateral pool",
+            collateral_pool_account.key,
+            authority_info.key,
+            &config.collateral_mint,
+        )?;
+
+        if user_deposit_account.data_is_empty() {
+            let rent = Rent::get()?;
+            let size = UserDeposit::LEN;
+            let lamports = rent.minimum_balance(size).max(1);
+            invoke_signed(
+                &system_instruction::create_account(
+                    user_info.key,
+                    user_deposit_account.key,
+                    lamports,
+                    size as u64,
+                    program_id,
+                ),
+                &[user_info.clone(), user_deposit_account.clone()],
+                &[&[user_info.key.as_ref(), &[user_deposit_bump]]],
+            )?;
+        } else {
+            return Err(TokenLockError::UserDepositAlreadyExists.into());
+        }
+
         let clock = Clock::get()?;
 
-        // Verify pool accounts are PDAs
-        let (expected_interest_pool, expected_collateral_pool) =
-            Self::find_pool_accounts(program_id, &config.interest_mint, &config.collateral_mint);
-        if *interest_pool_account.key != expected_interest_pool {
-            msg!(
-                "Invalid interest pool account: expected={}, actual={}",
-                expected_interest_pool,
-                interest_pool_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(1).into());
-        }
-        if *pool_token_account.key != expected_collateral_pool {
-            msg!(
-                "Invalid collateral pool account: expected={}, actual={}",
-                expected_collateral_pool,
-                pool_token_account.key
-            );
-            return Err(TokenLockError::InvalidPoolAccount(2).into());
-        }
-
         // Verify deposit amount is within limits
-        if amount < config.min_deposit_amount {
+        if amount < config.min_deposit_amount || amount > config.max_deposit_amount {
             msg!(
-                "Deposit amount below minimum: amount={}, min={}",
+                "Deposit amount out of bounds: amount={}, min={}, max={}",
                 amount,
-                config.min_deposit_amount
-            );
-            return Err(TokenLockError::AmountBelowMinimum(amount).into());
-        }
-        if amount > config.max_deposit_amount {
-            msg!(
-                "Deposit amount exceeds maximum: amount={}, max={}",
-                amount,
+                config.min_deposit_amount,
                 config.max_deposit_amount
             );
-            return Err(TokenLockError::AmountExceedsMaximum(amount).into());
+            return Err(TokenLockError::DepositAmountOutOfBounds(amount).into());
+        }
+        if commission_rate < config.min_commission_rate
+            || commission_rate > config.max_commission_rate
+        {
+            msg!(
+                "Commission rate out of bounds: rate={}, min={}, max={}",
+                commission_rate,
+                config.min_commission_rate,
+                config.max_commission_rate
+            );
+            return Err(TokenLockError::CommissionRateOutOfBounds(commission_rate).into());
         }
 
         // Verify lock period is valid
-        let lock_period = unlock_slot - clock.slot;
-        if !config.deposit_period.contains(&lock_period) {
+        if !config.deposit_period.contains(&deposit_period) {
             msg!(
                 "Invalid lock period: period={}, allowed periods={:?}",
-                lock_period,
+                deposit_period,
                 config.deposit_period
             );
-            return Err(TokenLockError::InvalidLockPeriod(lock_period).into());
+            return Err(TokenLockError::InvalidLockPeriod(deposit_period).into());
         }
 
-        // Calculate interest based on slot duration and price factor
-        let slot_duration = unlock_slot - clock.slot;
-
-        // Safely calculate interest with overflow checks
-        let interest_multiplier =
-            match (slot_duration as u128).checked_mul(config.base_interest_rate as u128) {
-                Some(v) => v,
-                None => return Err(TokenLockError::ArithmeticOverflow.into()),
-            };
-
-        let interest_multiplier = match interest_multiplier.checked_div(365 * 24 * 60 * 60 * 2) {
-            // Convert to annual rate (assuming 2 slots per second)
-            Some(v) => v,
-            None => return Err(TokenLockError::DivisionByZero.into()),
-        };
-
-        // Calculate interest amount with price factor
-        let interest_amount = match (amount as u128).checked_mul(interest_multiplier) {
-            Some(v) => v,
-            None => return Err(TokenLockError::ArithmeticOverflow.into()),
-        };
-
-        let interest_amount = match interest_amount.checked_mul(config.price_factor as u128) {
-            Some(v) => v,
-            None => return Err(TokenLockError::ArithmeticOverflow.into()),
-        };
-
-        let interest_amount = match interest_amount.checked_div(10000) {
-            Some(v) => v,
-            None => return Err(TokenLockError::DivisionByZero.into()),
-        };
-
-        let interest_amount = match interest_amount.checked_div(10000) {
-            Some(v) => v,
-            None => return Err(TokenLockError::DivisionByZero.into()),
-        } as u64;
-
-        // Calculate commission
-        let commission_rate = config.min_commission_rate; // Use min commission rate for now
-        let commission_amount = match (interest_amount as u128).checked_mul(commission_rate as u128)
-        {
-            Some(v) => v,
-            None => return Err(TokenLockError::ArithmeticOverflow.into()),
-        };
-
-        let commission_amount = match commission_amount.checked_div(10000) {
-            Some(v) => v,
-            None => return Err(TokenLockError::DivisionByZero.into()),
-        } as u64;
-
-        // Check if pool has enough interest tokens
-        let interest_pool_balance =
-            TokenAccount::unpack(&interest_pool_account.data.borrow())?.amount;
-        if interest_pool_balance < interest_amount {
-            msg!(
-                "Insufficient interest tokens in pool: balance={}, required={}",
-                interest_pool_balance,
-                interest_amount
-            );
-            return Err(TokenLockError::InsufficientPoolBalance(interest_pool_balance).into());
-        }
+        let interest_amount =
+            Self::calculate_interest_amount(amount, commission_rate, deposit_period, &config);
 
         // Transfer collateral to pool
         invoke(
             &token_instruction::transfer(
                 &spl_token::id(),
                 user_token_account.key,
-                pool_token_account.key,
-                &user_token_account.key,
+                collateral_pool_account.key,
+                &user_info.key,
                 &[],
                 amount,
             )?,
             &[
-                user_token_account.clone(),
-                pool_token_account.clone(),
+                user_info.clone(),
+                collateral_pool_account.clone(),
                 user_token_account.clone(),
             ],
         )?;
-
-        // Find pool authority PDA
-        let (authority_key, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], program_id);
 
         // Transfer interest to user
         invoke_signed(
@@ -1060,11 +1025,15 @@ impl Processor {
                 &spl_token::id(),
                 interest_pool_account.key,
                 user_interest_account.key,
-                &authority_key,
+                &authority_info.key,
                 &[],
-                interest_amount - commission_amount,
+                interest_amount,
             )?,
-            &[interest_pool_account.clone(), user_interest_account.clone()],
+            &[
+                authority_info.clone(),
+                interest_pool_account.clone(),
+                user_interest_account.clone(),
+            ],
             &[&[AUTHORITY_SEED, &[authority_bump]]],
         )?;
 
@@ -1072,36 +1041,57 @@ impl Processor {
         let user_deposit = UserDeposit {
             amount,
             deposit_slot: clock.slot,
-            unlock_slot,
-            interest_received: interest_amount - commission_amount,
+            unlock_slot: clock.slot + deposit_period,
+            interest_received: interest_amount,
             state: UserDepositState::Deposited,
             commission_rate,
         };
-        state.deposits.insert(*user_token_account.key, user_deposit);
-        state.serialize(&mut *state_info.data.borrow_mut())?;
+        let mut user_deposit_data = user_deposit_account.data.borrow_mut();
+        let mut dst = &mut user_deposit_data[..];
+        user_deposit.serialize(&mut dst)?;
 
         Ok(())
     }
 
-    fn process_request_withdrawal(_program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_request_withdrawal_early(
+        program_id: &Pubkey,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let user_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
-        let state_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
+        let user_deposit_account = next_account_info(account_info_iter)?;
         let user_interest_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
 
-        let _config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
-        let mut state = PoolState::try_from_slice(&state_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let _ = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
+        let _ = Self::check_pda(
+            "user deposit",
+            user_deposit_account.key,
+            &[user_info.key.as_ref()],
+            program_id,
+        )?;
+
+        let config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
+
+        Self::check_ata(
+            "interest pool",
+            interest_pool_account.key,
+            authority_info.key,
+            &config.interest_mint,
+        )?;
+
         let clock = Clock::get()?;
-
         // Find user's deposit
-        let deposit = state
-            .deposits
-            .get(user_interest_account.key)
-            .ok_or_else(|| {
-                msg!("No deposit found for user: {}", user_interest_account.key);
-                TokenLockError::NoDepositFound
-            })?;
+        let mut deposit = UserDeposit::try_from_slice(&user_deposit_account.data.borrow())?;
 
         // Verify deposit state
         if deposit.state != UserDepositState::Deposited {
@@ -1115,22 +1105,12 @@ impl Processor {
             return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
         }
 
-        // Calculate remaining interest to be returned based on actual lock duration
-        let actual_lock_duration = clock.slot - deposit.deposit_slot;
-        let total_lock_duration = deposit.unlock_slot - deposit.deposit_slot;
-
-        let interest_to_return =
-            match (deposit.interest_received as u128).checked_mul(actual_lock_duration as u128) {
-                Some(v) => v,
-                None => return Err(TokenLockError::ArithmeticOverflow.into()),
-            };
-
-        let interest_to_return = match interest_to_return.checked_div(total_lock_duration as u128) {
-            Some(v) => v,
-            None => {
-                return Err(TokenLockError::DivisionByZero.into());
-            }
-        } as u64;
+        let interest_to_return = Self::calculate_interest_to_return(
+            deposit.amount,
+            deposit.deposit_slot,
+            deposit.unlock_slot,
+            clock.slot,
+        )?;
 
         // Check if user has enough interest tokens to return
         let user_interest_balance =
@@ -1150,50 +1130,103 @@ impl Processor {
                 &spl_token::id(),
                 user_interest_account.key,
                 interest_pool_account.key,
-                &user_interest_account.key,
+                &user_info.key,
                 &[],
                 interest_to_return,
             )?,
             &[
-                user_interest_account.clone(),
+                user_info.clone(),
                 interest_pool_account.clone(),
                 user_interest_account.clone(),
             ],
         )?;
 
         // Update deposit state
-        let updated_deposit = UserDeposit {
-            amount: deposit.amount,
-            deposit_slot: deposit.deposit_slot,
-            unlock_slot: deposit.unlock_slot,
-            interest_received: deposit.interest_received,
-            state: UserDepositState::WithdrawRequested,
-            commission_rate: deposit.commission_rate,
-        };
-        state
-            .deposits
-            .insert(*user_interest_account.key, updated_deposit);
+        deposit.state = UserDepositState::WithdrawRequested;
+        let mut user_deposit_data = user_deposit_account.data.borrow_mut();
+        let mut dst = &mut user_deposit_data[..];
+        deposit.serialize(&mut dst)?;
 
-        state.serialize(&mut *state_info.data.borrow_mut())?;
+        Ok(())
+    }
+
+    fn process_request_withdrawal(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let user_info = next_account_info(account_info_iter)?;
+        let user_deposit_account = next_account_info(account_info_iter)?;
+
+        let _ = Self::check_pda(
+            "user deposit",
+            user_deposit_account.key,
+            &[user_info.key.as_ref()],
+            program_id,
+        )?;
+
+        let clock = Clock::get()?;
+        let mut deposit = UserDeposit::try_from_slice(&user_deposit_account.data.borrow())?;
+
+        if deposit.state != UserDepositState::WithdrawRequested {
+            let current_state = deposit.state as u8;
+            let expected_state = UserDepositState::WithdrawRequested as u8;
+            msg!(
+                "Invalid deposit state: current={:?}, expected={:?}",
+                deposit.state,
+                UserDepositState::WithdrawRequested
+            );
+
+            return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
+        }
+
+        if clock.slot < deposit.unlock_slot {
+            msg!(
+                "Deposit is not yet unlocked: slot={}, unlock_slot={}",
+                clock.slot,
+                deposit.unlock_slot
+            );
+            return Err(TokenLockError::NotUnlockedYet(clock.slot, deposit.unlock_slot).into());
+        }
+
+        deposit.state = UserDepositState::WithdrawReady;
+        let mut user_deposit_data = user_deposit_account.data.borrow_mut();
+        let mut dst = &mut user_deposit_data[..];
+        deposit.serialize(&mut dst)?;
 
         Ok(())
     }
 
     fn process_withdraw_collateral(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let user_info = next_account_info(account_info_iter)?;
         let config_info = next_account_info(account_info_iter)?;
-        let state_info = next_account_info(account_info_iter)?;
+        let authority_info = next_account_info(account_info_iter)?;
+        let user_deposit_account = next_account_info(account_info_iter)?;
         let user_token_account = next_account_info(account_info_iter)?;
-        let pool_token_account = next_account_info(account_info_iter)?;
+        let withdrawal_pool_account = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
 
-        let _config = PoolConfig::try_from_slice(&config_info.data.borrow())?;
-        let mut state = PoolState::try_from_slice(&state_info.data.borrow())?;
+        let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
+        let authority_bump = Self::check_pda(
+            "authority",
+            authority_info.key,
+            &[AUTHORITY_SEED],
+            program_id,
+        )?;
+        let _ = Self::check_pda(
+            "user deposit",
+            user_deposit_account.key,
+            &[user_info.key.as_ref()],
+            program_id,
+        )?;
+        let _ = Self::check_pda(
+            "withdrawal pool",
+            withdrawal_pool_account.key,
+            &[WITHDRAWAL_POOL_SEED],
+            program_id,
+        )?;
 
+        let _config = AstrapeConfig::try_from_slice(&config_info.data.borrow())?;
         // Find user's deposit
-        let deposit = state.deposits.get(user_token_account.key).ok_or_else(|| {
-            msg!("No deposit found for user: {}", user_token_account.key);
-            TokenLockError::NoDepositFound
-        })?;
+        let mut deposit = UserDeposit::try_from_slice(&user_deposit_account.data.borrow())?;
 
         // Verify deposit state
         if deposit.state != UserDepositState::WithdrawReady {
@@ -1207,38 +1240,40 @@ impl Processor {
             return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
         }
 
-        // Check if pool has enough tokens
-        let pool_balance = TokenAccount::unpack(&pool_token_account.data.borrow())?.amount;
+        // Check if withdrawal pool has enough tokens
+        let pool_balance = TokenAccount::unpack(&withdrawal_pool_account.data.borrow())?.amount;
         if pool_balance < deposit.amount {
             msg!(
-                "Insufficient pool balance: balance={}, required={}",
+                "Insufficient withdrawal pool balance: balance={}, required={}",
                 pool_balance,
                 deposit.amount
             );
             return Err(TokenLockError::InsufficientPoolBalance(pool_balance).into());
         }
 
-        // Find pool authority PDA
-        let (authority_key, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], program_id);
-
-        // Transfer collateral from pool to user
+        // Transfer collateral from withdrawal pool to user
         invoke_signed(
             &token_instruction::transfer(
                 &spl_token::id(),
-                pool_token_account.key,
+                withdrawal_pool_account.key,
                 user_token_account.key,
-                &authority_key,
+                &authority_info.key,
                 &[],
                 deposit.amount,
             )?,
-            &[pool_token_account.clone(), user_token_account.clone()],
+            &[
+                authority_info.clone(),
+                withdrawal_pool_account.clone(),
+                user_token_account.clone(),
+            ],
             &[&[AUTHORITY_SEED, &[authority_bump]]],
         )?;
 
         // Remove deposit
-        state.deposits.remove(user_token_account.key);
-        state.serialize(&mut *state_info.data.borrow_mut())?;
+        deposit.state = UserDepositState::WithdrawCompleted;
+        let mut user_deposit_data = user_deposit_account.data.borrow_mut();
+        let mut dst = &mut user_deposit_data[..];
+        deposit.serialize(&mut dst)?;
 
         Ok(())
     }

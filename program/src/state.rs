@@ -1,12 +1,12 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::pubkey::Pubkey;
-use std::collections::HashMap;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone, Copy)]
 pub enum UserDepositState {
     Deposited,
     WithdrawRequested,
     WithdrawReady,
+    WithdrawCompleted,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
@@ -20,8 +20,12 @@ pub struct UserDeposit {
     pub commission_rate: u64,
 }
 
+impl UserDeposit {
+    pub const LEN: usize = 8 + 8 + 8 + 8 + size_of::<UserDepositState>() + 8;
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct PoolConfig {
+pub struct AstrapeConfig {
     pub interest_mint: Pubkey,
     pub collateral_mint: Pubkey,
     pub base_interest_rate: u64,
@@ -33,15 +37,6 @@ pub struct PoolConfig {
     pub deposit_period: Vec<u64>,
 }
 
-impl PoolConfig {
-    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + 8; // pubkey(32) * 2 + u64(8) * 2 + u64(8) * 2 + u64(8) * 2 + u64(8)
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct PoolState {
-    pub deposits: HashMap<Pubkey, UserDeposit>,
-}
-
-impl PoolState {
-    pub const LEN: usize = 4; // vec_len(4)
+impl AstrapeConfig {
+    pub const LEN: usize = 32 * 2 + 8 * 6 + 8 * 3 + 4; // size_of::<Vec<u64>>(); // 160
 }

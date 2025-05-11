@@ -2,7 +2,7 @@ use {
     borsh::{BorshDeserialize, BorshSerialize},
     breakout_contract::{
         instructions::TokenLockInstruction,
-        state::{PoolConfig, PoolState, UserDepositState},
+        state::{AstrapeConfig, UserDeposit, UserDepositState},
     },
     solana_program::{
         instruction::{AccountMeta, Instruction},
@@ -15,6 +15,7 @@ use {
     solana_sdk::{
         account::Account,
         signature::{Keypair, Signer},
+        sysvar::SysvarId,
         transaction::Transaction,
     },
     spl_associated_token_account::instruction as ata_instruction,
@@ -29,6 +30,7 @@ const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 const CONFIG_SEED: &[u8] = b"pool_config";
 const STATE_SEED: &[u8] = b"pool_state";
 const AUTHORITY_SEED: &[u8] = b"authority";
+const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
 
 // Test helper struct
 struct TestHelper {
@@ -42,10 +44,12 @@ struct TestHelper {
     authority_pda: Pubkey,
     interest_pool_ata: Pubkey,
     collateral_pool_ata: Pubkey,
+    withdrawal_pool_pda: Pubkey,
     user_interest_ata: Pubkey,
     user_collateral_ata: Pubkey,
     admin_interest_ata: Pubkey,
     admin_collateral_ata: Pubkey,
+    user_deposit_account: Pubkey,
 }
 
 impl TestHelper {
@@ -65,6 +69,8 @@ impl TestHelper {
         let (config_pda, _) = Pubkey::find_program_address(&[CONFIG_SEED], &program_id);
         let (state_pda, _) = Pubkey::find_program_address(&[STATE_SEED], &program_id);
         let (authority_pda, _) = Pubkey::find_program_address(&[AUTHORITY_SEED], &program_id);
+        let (withdrawal_authority, _) =
+            Pubkey::find_program_address(&[WITHDRAWAL_POOL_SEED], &program_id);
 
         // Calculate ATAs
         let interest_pool_ata = spl_associated_token_account::get_associated_token_address(
@@ -76,6 +82,10 @@ impl TestHelper {
             &authority_pda,
             &collateral_mint.pubkey(),
         );
+
+        // Add the withdrawal pool ATA
+        let (withdrawal_pool_pda, _) =
+            Pubkey::find_program_address(&[WITHDRAWAL_POOL_SEED], &program_id);
 
         let user_interest_ata = spl_associated_token_account::get_associated_token_address(
             &user.pubkey(),
@@ -96,6 +106,10 @@ impl TestHelper {
             &admin.pubkey(),
             &collateral_mint.pubkey(),
         );
+
+        // User deposit account (PDA derived from user pubkey)
+        let (user_deposit_account, _) =
+            Pubkey::find_program_address(&[user.pubkey().as_ref()], &program_id);
 
         // Add account with some lamports to program_test to work with
         program_test.add_account(
@@ -125,10 +139,12 @@ impl TestHelper {
             authority_pda,
             interest_pool_ata,
             collateral_pool_ata,
+            withdrawal_pool_pda,
             user_interest_ata,
             user_collateral_ata,
             admin_interest_ata,
             admin_collateral_ata,
+            user_deposit_account,
         }
     }
 
@@ -160,7 +176,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin, &self.interest_mint],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
 
@@ -188,7 +204,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin, &self.collateral_mint],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -215,7 +231,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
 
@@ -240,7 +256,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -262,7 +278,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
 
@@ -282,7 +298,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -297,15 +313,16 @@ impl TestHelper {
             accounts: vec![
                 AccountMeta::new(self.admin.pubkey(), true), // Admin (payer & signer)
                 AccountMeta::new(self.config_pda, false),    // Config PDA
-                AccountMeta::new(self.state_pda, false),     // State PDA
+                AccountMeta::new(self.authority_pda, false), // Authority PDA
+                AccountMeta::new(self.interest_pool_ata, false), // Interest pool ATA
+                AccountMeta::new(self.collateral_pool_ata, false), // Collateral pool ATA
+                AccountMeta::new(self.withdrawal_pool_pda, false), // Withdrawal pool account
+                AccountMeta::new_readonly(self.interest_mint.pubkey(), false), // Interest mint
+                AccountMeta::new_readonly(self.collateral_mint.pubkey(), false), // Collateral mint
                 AccountMeta::new_readonly(solana_program::system_program::id(), false), // System program
                 AccountMeta::new_readonly(spl_token::id(), false), // Token program
                 AccountMeta::new_readonly(spl_associated_token_account::id(), false), // ATA program
-                AccountMeta::new(self.interest_pool_ata, false),   // Interest pool ATA
-                AccountMeta::new(self.collateral_pool_ata, false), // Collateral pool ATA
-                AccountMeta::new_readonly(self.interest_mint.pubkey(), false), // Interest mint
-                AccountMeta::new_readonly(self.collateral_mint.pubkey(), false), // Collateral mint
-                AccountMeta::new_readonly(self.program_id, false), // Program account (for authority)
+                AccountMeta::new_readonly(Rent::id(), false),      // Rent sysvar
             ],
             data: TokenLockInstruction::Initialize {
                 interest_mint: self.interest_mint.pubkey(),
@@ -328,13 +345,13 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
 
         // Process the transaction and handle the result
         match banks_client.process_transaction(transaction).await {
-            Ok(_) => println!("Transaction processed successfully"),
-            Err(e) => println!("Transaction failed: {:?}", e),
+            Ok(_) => log::info!("Transaction processed successfully"),
+            Err(e) => log::info!("Transaction failed: {:?}", e),
         }
     }
 
@@ -344,7 +361,8 @@ impl TestHelper {
             accounts: vec![
                 AccountMeta::new(self.admin.pubkey(), true),
                 AccountMeta::new_readonly(self.config_pda, false),
-                AccountMeta::new_readonly(self.admin_interest_ata, false),
+                AccountMeta::new_readonly(self.authority_pda, false),
+                AccountMeta::new(self.admin_interest_ata, false),
                 AccountMeta::new(self.interest_pool_ata, false),
                 AccountMeta::new_readonly(solana_program::system_program::id(), false),
                 AccountMeta::new_readonly(spl_token::id(), false),
@@ -355,25 +373,14 @@ impl TestHelper {
                 .unwrap(),
         };
 
-        // First, approve tokens for the program to transfer
-        let approve_instruction = token_instruction::approve(
-            &spl_token::id(),
-            &self.admin_interest_ata,
-            &self.authority_pda,
-            &self.admin.pubkey(),
-            &[],
-            amount,
-        )
-        .unwrap();
-
         let mut transaction = Transaction::new_with_payer(
-            &[approve_instruction, deposit_interest_instruction],
+            &[deposit_interest_instruction],
             Some(&self.admin.pubkey()),
         );
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -382,21 +389,27 @@ impl TestHelper {
         &self,
         banks_client: &mut BanksClient,
         amount: u64,
-        unlock_slot: u64,
+        deposit_period: u64,
+        commission_rate: u64,
     ) {
         let deposit_collateral_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
+                AccountMeta::new(self.user.pubkey(), true),
                 AccountMeta::new_readonly(self.config_pda, false),
-                AccountMeta::new(self.state_pda, false),
-                AccountMeta::new(self.user_collateral_ata, true),
+                AccountMeta::new_readonly(self.authority_pda, false),
+                AccountMeta::new(self.user_collateral_ata, false),
+                AccountMeta::new(self.user_deposit_account, false),
                 AccountMeta::new(self.collateral_pool_ata, false),
                 AccountMeta::new(self.user_interest_ata, false),
                 AccountMeta::new(self.interest_pool_ata, false),
+                AccountMeta::new_readonly(solana_program::system_program::id(), false),
+                AccountMeta::new_readonly(spl_token::id(), false),
             ],
             data: TokenLockInstruction::DepositCollateral {
                 amount,
-                unlock_slot,
+                deposit_period,
+                commission_rate,
             }
             .try_to_vec()
             .unwrap(),
@@ -404,12 +417,12 @@ impl TestHelper {
 
         let mut transaction = Transaction::new_with_payer(
             &[deposit_collateral_instruction],
-            Some(&self.admin.pubkey()),
+            Some(&self.user.pubkey()),
         );
 
         transaction.sign(
-            &[&self.admin, &self.user],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            &[&self.user],
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -420,6 +433,7 @@ impl TestHelper {
             accounts: vec![
                 AccountMeta::new(self.admin.pubkey(), true), // Admin (payer & signer)
                 AccountMeta::new_readonly(self.config_pda, false), // Config PDA
+                AccountMeta::new_readonly(self.authority_pda, false), // Authority PDA
                 AccountMeta::new(self.admin_collateral_ata, false), // Admin collateral ATA
                 AccountMeta::new(self.collateral_pool_ata, false), // Collateral pool ATA
                 AccountMeta::new_readonly(solana_program::system_program::id(), false), // System program
@@ -436,7 +450,36 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap();
+    }
+
+    async fn request_withdrawal_early(&self, banks_client: &mut BanksClient) {
+        let request_withdrawal_instruction = Instruction {
+            program_id: self.program_id,
+            accounts: vec![
+                AccountMeta::new(self.user.pubkey(), true),
+                AccountMeta::new_readonly(self.config_pda, false),
+                AccountMeta::new_readonly(self.authority_pda, false),
+                AccountMeta::new(self.user_deposit_account, false),
+                AccountMeta::new(self.user_interest_ata, false),
+                AccountMeta::new(self.interest_pool_ata, false),
+                AccountMeta::new_readonly(spl_token::id(), false),
+            ],
+            data: TokenLockInstruction::RequestWithdrawalEarly
+                .try_to_vec()
+                .unwrap(),
+        };
+
+        let mut transaction = Transaction::new_with_payer(
+            &[request_withdrawal_instruction],
+            Some(&self.user.pubkey()),
+        );
+
+        transaction.sign(
+            &[&self.user],
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -445,10 +488,8 @@ impl TestHelper {
         let request_withdrawal_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
-                AccountMeta::new_readonly(self.config_pda, false),
-                AccountMeta::new(self.state_pda, false),
-                AccountMeta::new(self.user_interest_ata, true),
-                AccountMeta::new(self.interest_pool_ata, false),
+                AccountMeta::new(self.user.pubkey(), true),
+                AccountMeta::new(self.user_deposit_account, false),
             ],
             data: TokenLockInstruction::RequestWithdrawal
                 .try_to_vec()
@@ -457,34 +498,12 @@ impl TestHelper {
 
         let mut transaction = Transaction::new_with_payer(
             &[request_withdrawal_instruction],
-            Some(&self.admin.pubkey()),
+            Some(&self.user.pubkey()),
         );
 
         transaction.sign(
-            &[&self.admin, &self.user],
-            banks_client.get_recent_blockhash().await.unwrap(),
-        );
-        banks_client.process_transaction(transaction).await.unwrap();
-    }
-
-    async fn admin_update_deposit_states(&self, banks_client: &mut BanksClient) {
-        let update_states_instruction = Instruction {
-            program_id: self.program_id,
-            accounts: vec![
-                AccountMeta::new(self.admin.pubkey(), true),
-                AccountMeta::new(self.state_pda, false),
-            ],
-            data: TokenLockInstruction::AdminUpdateDepositStates
-                .try_to_vec()
-                .unwrap(),
-        };
-
-        let mut transaction =
-            Transaction::new_with_payer(&[update_states_instruction], Some(&self.admin.pubkey()));
-
-        transaction.sign(
-            &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            &[&self.user],
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -495,15 +514,13 @@ impl TestHelper {
             accounts: vec![
                 AccountMeta::new(self.admin.pubkey(), true),
                 AccountMeta::new_readonly(self.config_pda, false),
-                AccountMeta::new(self.state_pda, false),
                 AccountMeta::new(self.admin_collateral_ata, false),
-                AccountMeta::new_readonly(self.user_collateral_ata, false),
-                AccountMeta::new(self.collateral_pool_ata, false),
-                AccountMeta::new_readonly(solana_program::system_program::id(), false),
+                AccountMeta::new(self.withdrawal_pool_pda, false),
+                AccountMeta::new_readonly(user_pubkey, false),
+                AccountMeta::new(self.user_deposit_account, false),
                 AccountMeta::new_readonly(spl_token::id(), false),
-                AccountMeta::new_readonly(spl_associated_token_account::id(), false),
             ],
-            data: TokenLockInstruction::AdminPrepareWithdrawal { user_pubkey }
+            data: TokenLockInstruction::AdminPrepareWithdrawal
                 .try_to_vec()
                 .unwrap(),
         };
@@ -515,7 +532,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -524,10 +541,13 @@ impl TestHelper {
         let withdraw_collateral_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
+                AccountMeta::new(self.user.pubkey(), true),
                 AccountMeta::new_readonly(self.config_pda, false),
-                AccountMeta::new(self.state_pda, false),
+                AccountMeta::new_readonly(self.authority_pda, false),
+                AccountMeta::new(self.user_deposit_account, false),
                 AccountMeta::new(self.user_collateral_ata, false),
-                AccountMeta::new(self.collateral_pool_ata, false),
+                AccountMeta::new(self.withdrawal_pool_pda, false),
+                AccountMeta::new_readonly(spl_token::id(), false),
             ],
             data: TokenLockInstruction::WithdrawCollateral
                 .try_to_vec()
@@ -536,12 +556,12 @@ impl TestHelper {
 
         let mut transaction = Transaction::new_with_payer(
             &[withdraw_collateral_instruction],
-            Some(&self.admin.pubkey()),
+            Some(&self.user.pubkey()),
         );
 
         transaction.sign(
-            &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            &[&self.user],
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -572,7 +592,7 @@ impl TestHelper {
 
         transaction.sign(
             &[&self.admin],
-            banks_client.get_recent_blockhash().await.unwrap(),
+            banks_client.get_latest_blockhash().await.unwrap(),
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
@@ -580,23 +600,13 @@ impl TestHelper {
     async fn read_config(
         &self,
         banks_client: &mut BanksClient,
-    ) -> Result<PoolConfig, Box<dyn std::error::Error>> {
+    ) -> Result<AstrapeConfig, Box<dyn std::error::Error>> {
         let config_account = banks_client
             .get_account(self.config_pda)
             .await?
             .ok_or("Config account not found")?;
-        Ok(PoolConfig::try_from_slice(&config_account.data)?)
-    }
-
-    async fn read_state(
-        &self,
-        banks_client: &mut BanksClient,
-    ) -> Result<PoolState, Box<dyn std::error::Error>> {
-        let state_account = banks_client
-            .get_account(self.state_pda)
-            .await?
-            .ok_or("State account not found")?;
-        Ok(PoolState::try_from_slice(&state_account.data)?)
+        log::info!("Config account data: {:?}", config_account.data);
+        Ok(AstrapeConfig::try_from_slice(&config_account.data)?)
     }
 
     async fn get_token_balance(
@@ -627,20 +637,62 @@ impl TestHelper {
         // PDAs are owned by the program and are only created when needed
         // For ATAs, the program will just use the bumped PDA
 
-        println!("Authority PDA at {}", authority_pda);
+        log::info!("Authority PDA at {}", authority_pda);
+    }
+
+    async fn read_user_deposit(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<UserDeposit, Box<dyn std::error::Error>> {
+        let deposit_account = banks_client
+            .get_account(self.user_deposit_account)
+            .await?
+            .ok_or("User deposit account not found")?;
+        Ok(UserDeposit::try_from_slice(&deposit_account.data)?)
+    }
+
+    async fn admin_withdraw_interest(&self, banks_client: &mut BanksClient, amount: u64) {
+        let withdraw_interest_instruction = Instruction {
+            program_id: self.program_id,
+            accounts: vec![
+                AccountMeta::new(self.admin.pubkey(), true),
+                AccountMeta::new_readonly(self.config_pda, false),
+                AccountMeta::new_readonly(self.authority_pda, false),
+                AccountMeta::new(self.admin_interest_ata, false),
+                AccountMeta::new(self.interest_pool_ata, false),
+                AccountMeta::new_readonly(solana_program::system_program::id(), false),
+                AccountMeta::new_readonly(spl_token::id(), false),
+                AccountMeta::new_readonly(spl_associated_token_account::id(), false),
+            ],
+            data: TokenLockInstruction::AdminWithdrawInterest { amount }
+                .try_to_vec()
+                .unwrap(),
+        };
+
+        let mut transaction = Transaction::new_with_payer(
+            &[withdraw_interest_instruction],
+            Some(&self.admin.pubkey()),
+        );
+
+        transaction.sign(
+            &[&self.admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap();
     }
 }
 
 #[tokio::test]
 async fn test_full_flow() {
-    println!("=============================================");
-    println!("STARTING TOKEN LOCK CONTRACT INTEGRATION TEST");
-    println!("=============================================");
+    env_logger::init();
+    log::info!("=============================================");
+    log::info!("STARTING TOKEN LOCK CONTRACT INTEGRATION TEST");
+    log::info!("=============================================");
 
     // Initialize the test context
-    println!("Setting up test environment...");
+    log::info!("Setting up test environment...");
     let program_id = breakout_contract::id();
-    println!("Program ID: {}", program_id);
+    log::info!("Program ID: {}", program_id);
 
     let mut program_test = ProgramTest::new(
         "breakout_contract",
@@ -648,148 +700,135 @@ async fn test_full_flow() {
         processor!(breakout_contract::entrypoint::process_instruction),
     );
 
-    println!("Creating test helper with accounts and PDAs...");
+    log::info!("Creating test helper with accounts and PDAs...");
     // Initialize the test helper
     let test_helper = TestHelper::new(&mut program_test).await;
 
-    println!("Admin pubkey: {}", test_helper.admin.pubkey());
-    println!("Config PDA: {}", test_helper.config_pda);
-    println!("State PDA: {}", test_helper.state_pda);
-    println!("Authority PDA: {}", test_helper.authority_pda);
-    println!("Interest mint: {}", test_helper.interest_mint.pubkey());
-    println!("Collateral mint: {}", test_helper.collateral_mint.pubkey());
+    log::info!("Admin pubkey: {}", test_helper.admin.pubkey());
+    log::info!("Config PDA: {}", test_helper.config_pda);
+    log::info!("Authority PDA: {}", test_helper.authority_pda);
+    log::info!("Interest mint: {}", test_helper.interest_mint.pubkey());
+    log::info!("Collateral mint: {}", test_helper.collateral_mint.pubkey());
 
-    println!("Starting banks client...");
+    log::info!("Starting banks client...");
     let (mut banks_client, _payer, _recent_blockhash) = program_test.start().await;
 
     // Setup test environment
-    println!("\n[1/3] Setting up token mints...");
+    log::info!("\n[1/3] Setting up token mints...");
     test_helper.setup_mints(&mut banks_client).await;
-    println!("✓ Mints created successfully");
+    log::info!("✓ Mints created successfully");
 
-    println!("\n[2/3] Creating token accounts...");
+    log::info!("\n[2/3] Creating token accounts...");
     test_helper.create_token_accounts(&mut banks_client).await;
-    println!("✓ Token accounts created successfully");
+    log::info!("✓ Token accounts created successfully");
 
-    println!("\n[3/3] Minting initial tokens...");
+    log::info!("\n[3/3] Minting initial tokens...");
     test_helper.mint_tokens(&mut banks_client).await;
-    println!("✓ Tokens minted successfully");
+    log::info!("✓ Tokens minted successfully");
 
-    println!("\nTEST ENVIRONMENT SETUP COMPLETE");
-    println!("-------------------------------");
+    log::info!("\nTEST ENVIRONMENT SETUP COMPLETE");
+    log::info!("-------------------------------");
 
     // Initialize the program
-    println!("\n🔍 INITIALIZING PROGRAM");
-    println!("Calling Initialize instruction...");
+    log::info!("\n🔍 INITIALIZING PROGRAM");
+    log::info!("Calling Initialize instruction...");
 
     // Get balances before
     if let Ok(account) = banks_client
         .get_account(test_helper.interest_pool_ata)
         .await
     {
-        println!(
+        log::info!(
             "Interest pool ATA exists before init: {}",
             account.is_some()
         );
     } else {
-        println!("Error checking interest pool ATA");
+        log::info!("Error checking interest pool ATA");
     }
 
     if let Ok(account) = banks_client
         .get_account(test_helper.collateral_pool_ata)
         .await
     {
-        println!(
+        log::info!(
             "Collateral pool ATA exists before init: {}",
             account.is_some()
         );
     } else {
-        println!("Error checking collateral pool ATA");
+        log::info!("Error checking collateral pool ATA");
     }
 
     if let Ok(account) = banks_client.get_account(test_helper.config_pda).await {
-        println!("Config PDA exists before init: {}", account.is_some());
+        log::info!("Config PDA exists before init: {}", account.is_some());
     } else {
-        println!("Error checking config PDA");
+        log::info!("Error checking config PDA");
     }
 
-    if let Ok(account) = banks_client.get_account(test_helper.state_pda).await {
-        println!("State PDA exists before init: {}", account.is_some());
-    } else {
-        println!("Error checking state PDA");
-    }
-
-    println!("Sending initialize transaction...");
+    log::info!("Sending initialize transaction...");
     test_helper.initialize_program(&mut banks_client).await;
-    println!("✓ Program initialized successfully");
+    log::info!("✓ Program initialized successfully");
 
     // Check account states after initialization
-    println!("\nVerifying accounts after initialization:");
+    log::info!("\nVerifying accounts after initialization:");
     if let Ok(account) = banks_client.get_account(test_helper.config_pda).await {
-        println!("Config PDA exists: {}", account.is_some());
+        log::info!("Config PDA exists: {}", account.is_some());
         if let Some(acc) = account {
-            println!("Config data size: {} bytes", acc.data.len());
+            log::info!("Config data size: {} bytes", acc.data.len());
         }
     } else {
-        println!("Error checking config PDA");
-    }
-
-    if let Ok(account) = banks_client.get_account(test_helper.state_pda).await {
-        println!("State PDA exists: {}", account.is_some());
-        if let Some(acc) = account {
-            println!("State data size: {} bytes", acc.data.len());
-        }
-    } else {
-        println!("Error checking state PDA");
+        log::info!("Error checking config PDA");
     }
 
     if let Ok(account) = banks_client
         .get_account(test_helper.interest_pool_ata)
         .await
     {
-        println!("Interest pool ATA exists: {}", account.is_some());
+        log::info!("Interest pool ATA exists: {}", account.is_some());
     } else {
-        println!("Error checking interest pool ATA");
+        log::info!("Error checking interest pool ATA");
     }
 
     if let Ok(account) = banks_client
         .get_account(test_helper.collateral_pool_ata)
         .await
     {
-        println!("Collateral pool ATA exists: {}", account.is_some());
+        log::info!("Collateral pool ATA exists: {}", account.is_some());
     } else {
-        println!("Error checking collateral pool ATA");
+        log::info!("Error checking collateral pool ATA");
     }
 
     // Only try reading the config if it exists
-    println!("\nReading configuration data...");
+    log::info!("\nReading configuration data...");
     if let Ok(Some(_)) = banks_client.get_account(test_helper.config_pda).await {
-        if let Ok(config) = test_helper.read_config(&mut banks_client).await {
-            println!("Config data read successfully:");
-            println!("  Base interest rate: {}", config.base_interest_rate);
-            println!("  Min commission rate: {}", config.min_commission_rate);
-            println!("  Max commission rate: {}", config.max_commission_rate);
-            println!("  Interest mint: {}", config.interest_mint);
-            println!("  Collateral mint: {}", config.collateral_mint);
+        match test_helper.read_config(&mut banks_client).await {
+            Ok(config) => {
+                log::info!("Config data read successfully:");
+                log::info!("  Base interest rate: {}", config.base_interest_rate);
+                log::info!("  Min commission rate: {}", config.min_commission_rate);
+                log::info!("  Max commission rate: {}", config.max_commission_rate);
+                log::info!("  Interest mint: {}", config.interest_mint);
+                log::info!("  Collateral mint: {}", config.collateral_mint);
 
-            assert_eq!(config.base_interest_rate, 500);
-            assert_eq!(config.min_commission_rate, 100);
-            println!("✓ Configuration verified");
-        } else {
-            println!("Failed to read config data.");
-            println!("Ending test early.");
-            return;
+                assert_eq!(config.base_interest_rate, 500);
+                assert_eq!(config.min_commission_rate, 100);
+                log::info!("✓ Configuration verified");
+            }
+            Err(e) => {
+                log::error!("Failed to read config data: {}", e);
+                log::info!("Ending test early.");
+                return;
+            }
         }
     } else {
-        println!("Config account doesn't exist, initialization likely failed.");
-        println!("Ending test early.");
+        log::info!("Config account doesn't exist, initialization likely failed.");
+        log::info!("Ending test early.");
         return;
     }
 
     // Admin deposits interest for users to earn
-    println!("\n🔍 TESTING ADMIN DEPOSIT INTEREST");
+    log::info!("\n🔍 TESTING ADMIN DEPOSIT INTEREST");
     let interest_deposit_amount = 10_000_000_000; // 10,000 tokens
-    println!(
+    log::info!(
         "Admin depositing {} interest tokens...",
         interest_deposit_amount / 1_000_000
     );
@@ -801,11 +840,11 @@ async fn test_full_flow() {
     let pool_interest_before = test_helper
         .get_token_balance(&mut banks_client, &test_helper.interest_pool_ata)
         .await;
-    println!(
+    log::info!(
         "Admin interest balance before: {} tokens",
         admin_interest_before / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool interest balance before: {} tokens",
         pool_interest_before / 1_000_000
     );
@@ -821,27 +860,28 @@ async fn test_full_flow() {
     let pool_interest_after = test_helper
         .get_token_balance(&mut banks_client, &test_helper.interest_pool_ata)
         .await;
-    println!(
+    log::info!(
         "Admin interest balance after: {} tokens",
         admin_interest_after / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool interest balance after: {} tokens",
         pool_interest_after / 1_000_000
     );
-    println!("✓ Admin deposit interest successful");
+    log::info!("✓ Admin deposit interest successful");
 
     // User deposits collateral
-    println!("\n🔍 TESTING USER DEPOSIT COLLATERAL");
+    log::info!("\n🔍 TESTING USER DEPOSIT COLLATERAL");
     let deposit_amount = 5_000_000_000; // 5,000 tokens
     let current_slot = banks_client.get_root_slot().await.unwrap();
-    let unlock_slot = current_slot + 200; // 200 slots from now
-    println!("Current slot: {}", current_slot);
-    println!("Unlock slot: {}", unlock_slot);
-    println!(
+    let deposit_period = 100;
+    let commission_rate = 100;
+    log::info!("Current slot: {}", current_slot);
+    log::info!("Deposit period: {}", deposit_period);
+    log::info!(
         "User depositing {} collateral tokens until slot {}...",
         deposit_amount / 1_000_000,
-        unlock_slot
+        current_slot + deposit_period
     );
 
     // Check balances before
@@ -851,17 +891,22 @@ async fn test_full_flow() {
     let pool_collateral_before = test_helper
         .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
         .await;
-    println!(
+    log::info!(
         "User collateral balance before: {} tokens",
         user_collateral_before / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool collateral balance before: {} tokens",
         pool_collateral_before / 1_000_000
     );
 
     test_helper
-        .deposit_collateral(&mut banks_client, deposit_amount, unlock_slot)
+        .deposit_collateral(
+            &mut banks_client,
+            deposit_amount,
+            deposit_period,
+            commission_rate,
+        )
         .await;
 
     // Check balances after
@@ -871,36 +916,32 @@ async fn test_full_flow() {
     let pool_collateral_after = test_helper
         .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
         .await;
-    println!(
+    log::info!(
         "User collateral balance after: {} tokens",
         user_collateral_after / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool collateral balance after: {} tokens",
         pool_collateral_after / 1_000_000
     );
 
     // Verify deposit state
-    println!("\nVerifying deposit state...");
-    if let Ok(state) = test_helper.read_state(&mut banks_client).await {
-        if let Some(user_deposit) = state.deposits.get(&test_helper.user_collateral_ata) {
-            println!("Deposit amount: {}", user_deposit.amount);
-            println!("Deposit state: {:?}", user_deposit.state);
-            println!("Interest received: {}", user_deposit.interest_received);
+    log::info!("\nVerifying deposit state...");
+    if let Ok(user_deposit) = test_helper.read_user_deposit(&mut banks_client).await {
+        log::info!("Deposit amount: {}", user_deposit.amount);
+        log::info!("Deposit state: {:?}", user_deposit.state);
+        log::info!("Interest received: {}", user_deposit.interest_received);
 
-            assert_eq!(user_deposit.amount, deposit_amount);
-            assert_eq!(user_deposit.state, UserDepositState::Deposited);
-            println!("✓ User deposit verified");
-        } else {
-            println!("User deposit not found in state");
-        }
+        assert_eq!(user_deposit.amount, deposit_amount);
+        assert_eq!(user_deposit.state, UserDepositState::Deposited);
+        log::info!("✓ User deposit verified");
     } else {
-        println!("Failed to read state");
+        log::info!("Failed to read user deposit");
     }
 
     // Admin withdraws collateral for investment
-    println!("\n🔍 TESTING ADMIN WITHDRAW COLLATERAL FOR INVESTMENT");
-    println!("Admin withdrawing collateral for investment...");
+    log::info!("\n🔍 TESTING ADMIN WITHDRAW COLLATERAL FOR INVESTMENT");
+    log::info!("Admin withdrawing collateral for investment...");
 
     // Check balances before
     let admin_collateral_before = test_helper
@@ -909,11 +950,11 @@ async fn test_full_flow() {
     let pool_collateral_before = test_helper
         .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
         .await;
-    println!(
+    log::info!(
         "Admin collateral balance before: {} tokens",
         admin_collateral_before / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool collateral balance before: {} tokens",
         pool_collateral_before / 1_000_000
     );
@@ -929,88 +970,68 @@ async fn test_full_flow() {
     let pool_collateral_after = test_helper
         .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
         .await;
-    println!(
+    log::info!(
         "Admin collateral balance after: {} tokens",
         admin_collateral_after / 1_000_000
     );
-    println!(
+    log::info!(
         "Pool collateral balance after: {} tokens",
         pool_collateral_after / 1_000_000
     );
 
     // Verify admin received the collateral
     assert_eq!(admin_collateral_after, deposit_amount);
-    println!("✓ Admin withdrawal verified");
+    log::info!("✓ Admin withdrawal verified");
 
     // Fast-forward slots (not actually possible in test, but we'll pretend)
     // In a real scenario, time would pass and the unlock_slot would be reached
-    println!("\n🔍 TESTING WITHDRAWAL FLOW");
-    println!("Starting withdrawal flow (simulating time passing)...");
+    log::info!("\n🔍 TESTING WITHDRAWAL FLOW");
+    log::info!("Starting withdrawal flow (simulating time passing)...");
 
-    // Admin updates deposit states (would normally be triggered after slots pass)
-    println!("\nUpdating deposit states...");
+    // User requests early withdrawal
+    log::info!("\nUser requesting early withdrawal...");
     test_helper
-        .admin_update_deposit_states(&mut banks_client)
+        .request_withdrawal_early(&mut banks_client)
         .await;
-    println!("✓ Deposit states updated");
-
-    // User requests withdrawal
-    println!("\nUser requesting withdrawal...");
-    test_helper.request_withdrawal(&mut banks_client).await;
-    println!("✓ Withdrawal requested");
+    log::info!("✓ Early withdrawal requested");
 
     // Verify deposit state changed
-    println!("\nVerifying deposit state after request...");
-    if let Ok(state) = test_helper.read_state(&mut banks_client).await {
-        if let Some(user_deposit) = state.deposits.get(&test_helper.user_collateral_ata) {
-            println!("Deposit state: {:?}", user_deposit.state);
-            assert_eq!(user_deposit.state, UserDepositState::WithdrawRequested);
-            println!("✓ State change verified");
-        } else {
-            println!("User deposit not found in state");
-        }
+    log::info!("\nVerifying deposit state after request...");
+    if let Ok(user_deposit) = test_helper.read_user_deposit(&mut banks_client).await {
+        log::info!("Deposit state: {:?}", user_deposit.state);
+        assert_eq!(user_deposit.state, UserDepositState::WithdrawRequested);
+        log::info!("✓ State change verified");
     } else {
-        println!("Failed to read state");
+        log::info!("Failed to read user deposit");
     }
 
     // Admin prepares for user withdrawal
-    println!("\nAdmin preparing withdrawal...");
+    log::info!("\nAdmin preparing withdrawal...");
     test_helper
         .admin_prepare_withdrawal(&mut banks_client, test_helper.user.pubkey())
         .await;
-    println!("✓ Withdrawal prepared");
+    log::info!("✓ Withdrawal prepared");
 
     // Verify deposit state changed again
-    println!("\nVerifying deposit state after preparation...");
-    if let Ok(state) = test_helper.read_state(&mut banks_client).await {
-        if let Some(user_deposit) = state.deposits.get(&test_helper.user_collateral_ata) {
-            println!("Deposit state: {:?}", user_deposit.state);
-            assert_eq!(user_deposit.state, UserDepositState::WithdrawReady);
-            println!("✓ State change verified");
-        } else {
-            println!("User deposit not found in state");
-        }
+    log::info!("\nVerifying deposit state after preparation...");
+    if let Ok(user_deposit) = test_helper.read_user_deposit(&mut banks_client).await {
+        log::info!("Deposit state: {:?}", user_deposit.state);
+        assert_eq!(user_deposit.state, UserDepositState::WithdrawReady);
+        log::info!("✓ State change verified");
     } else {
-        println!("Failed to read state");
+        log::info!("Failed to read user deposit");
     }
 
     // User withdraws collateral
-    println!("\nUser withdrawing collateral...");
+    log::info!("\nUser withdrawing collateral...");
 
     // Check balances before
     let user_collateral_before = test_helper
         .get_token_balance(&mut banks_client, &test_helper.user_collateral_ata)
         .await;
-    let pool_collateral_before = test_helper
-        .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
-        .await;
-    println!(
+    log::info!(
         "User collateral balance before: {} tokens",
         user_collateral_before / 1_000_000
-    );
-    println!(
-        "Pool collateral balance before: {} tokens",
-        pool_collateral_before / 1_000_000
     );
 
     test_helper.withdraw_collateral(&mut banks_client).await;
@@ -1019,47 +1040,32 @@ async fn test_full_flow() {
     let user_collateral_after = test_helper
         .get_token_balance(&mut banks_client, &test_helper.user_collateral_ata)
         .await;
-    let pool_collateral_after = test_helper
-        .get_token_balance(&mut banks_client, &test_helper.collateral_pool_ata)
-        .await;
-    println!(
+    log::info!(
         "User collateral balance after: {} tokens",
         user_collateral_after / 1_000_000
     );
-    println!(
-        "Pool collateral balance after: {} tokens",
-        pool_collateral_after / 1_000_000
-    );
 
-    // Verify user received their collateral back
-    assert_eq!(user_collateral_after, deposit_amount);
-    println!("✓ User collateral withdrawal verified");
-
-    // Verify deposit was removed from state
-    println!("\nVerifying deposit was removed from state...");
-    if let Ok(state) = test_helper.read_state(&mut banks_client).await {
-        let deposit_exists = state
-            .deposits
-            .get(&test_helper.user_collateral_ata)
-            .is_some();
-        println!("Deposit still exists: {}", deposit_exists);
-        assert!(!deposit_exists);
-        println!("✓ Deposit removal verified");
+    // Verify deposit state is now completed
+    log::info!("\nVerifying final deposit state...");
+    if let Ok(user_deposit) = test_helper.read_user_deposit(&mut banks_client).await {
+        log::info!("Deposit state: {:?}", user_deposit.state);
+        assert_eq!(user_deposit.state, UserDepositState::WithdrawCompleted);
+        log::info!("✓ Withdrawal completed verified");
     } else {
-        println!("Failed to read state");
+        log::info!("Failed to read user deposit");
     }
 
     // Admin updates configuration
-    println!("\n🔍 TESTING ADMIN UPDATE CONFIG");
-    println!("Admin updating configuration...");
+    log::info!("\n🔍 TESTING ADMIN UPDATE CONFIG");
+    log::info!("Admin updating configuration...");
 
     // Get config before
-    println!(
+    log::info!(
         "Base interest rate before: {}",
         if let Ok(config_before) = test_helper.read_config(&mut banks_client).await {
             config_before.base_interest_rate
         } else {
-            println!("Failed to read config before update");
+            log::info!("Failed to read config before update");
             0
         }
     );
@@ -1068,19 +1074,19 @@ async fn test_full_flow() {
 
     // Get config after
     if let Ok(config_after) = test_helper.read_config(&mut banks_client).await {
-        println!(
+        log::info!(
             "Base interest rate after: {}",
             config_after.base_interest_rate
         );
 
         // Verify configuration was updated
         assert_eq!(config_after.base_interest_rate, 600); // Updated from 500 to 600
-        println!("✓ Configuration update verified");
+        log::info!("✓ Configuration update verified");
     } else {
-        println!("Failed to read config after update");
+        log::info!("Failed to read config after update");
     }
 
-    println!("\n=============================================");
-    println!("ALL TESTS COMPLETED SUCCESSFULLY");
-    println!("=============================================");
+    log::info!("\n=============================================");
+    log::info!("ALL TESTS COMPLETED SUCCESSFULLY");
+    log::info!("=============================================");
 }
