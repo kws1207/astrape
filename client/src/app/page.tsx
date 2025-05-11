@@ -79,17 +79,20 @@ export default function Home() {
           <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
             {/* 왼쪽: 타이틀과 설명 */}
             <div className="flex flex-col items-start">
-              <h1 className="mb-12 text-4xl font-bold text-shade-primary md:text-5xl lg:text-6xl">
-                <span className="text-primary-apollo">Deposit BTC</span>
-                <br />
-                <span className="mt-4 inline-block">& Earn Interest Now</span>
-              </h1>
-              <p className="mb-8 text-lg text-shade-secondary md:text-lg">
-                <span>
-                  Receive immediate interest in USDC for your deposited BTC.
+              <h1 className="mb-12 text-4xl font-bold text-shade-primary">
+                <span className="text-6xl text-primary-apollo">
+                  Deposit BTC
                 </span>
                 <br />
-                <span>Use now, Pay later.</span>
+                <span className="mt-4 inline-block text-5xl">
+                  & Claim your Yield Now
+                </span>
+              </h1>
+              <p className="mb-8 text-xl text-shade-secondary md:text-xl">
+                Receive your yield upfront.
+                <span className="ml-2 rounded-lg bg-primary-apollo/10 px-3 py-1 font-bold text-primary-apollo">
+                  Use Now, Sell Never.
+                </span>
               </p>
             </div>
 
@@ -181,7 +184,7 @@ export default function Home() {
           <p className="mx-auto mb-12 max-w-3xl text-center text-shade-secondary">
             Deposit BTC and earn interest in just a few simple steps.
           </p>
-          <div className="mb-16 grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="mb-16 grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-apollo font-bold text-white">
@@ -190,10 +193,10 @@ export default function Home() {
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2">
                     <h3 className="text-xl font-semibold text-shade-primary">
-                      Deposit BTC, Get USDC Instantly
+                      Deposit zBTC, Get USDC
                     </h3>
                     <Icon
-                      name="Provide"
+                      name="zbtc"
                       size={18}
                       className="text-primary-apollo"
                     />
@@ -210,30 +213,6 @@ export default function Home() {
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-apollo font-bold text-white">
                   2
-                </div>
-                <div className="flex-1">
-                  <div className="mb-2 flex items-center gap-2">
-                    <h3 className="text-xl font-semibold text-shade-primary">
-                      Receive zBTC Tokens
-                    </h3>
-                    <Icon
-                      name="zbtc"
-                      size={18}
-                      className="text-primary-apollo"
-                    />
-                  </div>
-                  <p className="text-shade-secondary">
-                    Get zBTC tokens representing your deposited BTC plus
-                    interest. These tokens can be held or transferred.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-apollo font-bold text-white">
-                  3
                 </div>
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2">
@@ -257,7 +236,7 @@ export default function Home() {
             <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-apollo font-bold text-white">
-                  4
+                  3
                 </div>
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2">
@@ -271,8 +250,8 @@ export default function Home() {
                     />
                   </div>
                   <p className="text-shade-secondary">
-                    Get your BTC back at the end of the term by returning your
-                    zBTC tokens. Early withdrawal options available.
+                    Get your BTC back at the end of the term. Early withdrawal
+                    options available with a fee.
                   </p>
                 </div>
               </div>
@@ -286,8 +265,7 @@ export default function Home() {
                 Interest Claims & Dashboard
               </h3>
               <p className="mb-6 text-lg text-shade-secondary">
-                Claim your interest anytime and monitor your assets on the
-                dashboard after deposit.
+                Claim your interest immediately and monitor your assets
               </p>
               <ul className="space-y-4">
                 <li className="flex items-start">
@@ -340,7 +318,7 @@ export default function Home() {
             <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
               <div className="mb-4 rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-4">
                 <h3 className="mb-2 text-xl font-semibold text-shade-primary">
-                  Example: BTC Deposit
+                  Example:
                 </h3>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-shade-secondary">Deposit Amount</span>
@@ -355,10 +333,6 @@ export default function Home() {
                   <span className="font-medium text-green-600">
                     +$77,195 USDC
                   </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-shade-secondary">Issued Token</span>
-                  <span className="font-medium">1 zBTC</span>
                 </div>
               </div>
               <div className="rounded-xl bg-primary-apollo/5 p-4">
