@@ -6,53 +6,52 @@ import { UserDepositState } from "@/types/astrape";
 import Icon from "@/components/Icons";
 import Button from "@/components/Button/Button";
 import { useRouter } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useEffect } from "react";
+
+const getStateLabel = (state: UserDepositState) => {
+  switch (state) {
+    case UserDepositState.Deposited:
+      return "Active";
+    case UserDepositState.WithdrawRequested:
+      return "Withdrawal Requested";
+    case UserDepositState.WithdrawReady:
+      return "Ready to Withdraw";
+    default:
+      return "Unknown";
+  }
+};
+
+const getStateColor = (state: UserDepositState) => {
+  switch (state) {
+    case UserDepositState.Deposited:
+      return "text-green-600";
+    case UserDepositState.WithdrawRequested:
+      return "text-yellow-600";
+    case UserDepositState.WithdrawReady:
+      return "text-primary-apollo";
+    default:
+      return "text-gray-600";
+  }
+};
+
+const getRemainingTime = (unlockSlot: number, depositSlot: number) => {
+  const currentSlot =
+    depositSlot + Math.floor((Date.now() / 1000 - depositSlot) * 0.4);
+  const remainingSlots = Math.max(0, unlockSlot - currentSlot);
+  const remainingDays = Math.ceil(remainingSlots / (2 * 60 * 24));
+
+  return `${remainingDays} days`;
+};
 
 export default function DashboardPage() {
-  const { userDeposit } = useAstrape();
+  const { userDeposit, mutateUserDeposit } = useAstrape();
   const router = useRouter();
+  const { connected: solanaWalletConnected } = useWallet();
 
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const getStateLabel = (state: UserDepositState) => {
-    switch (state) {
-      case UserDepositState.Deposited:
-        return "Active";
-      case UserDepositState.WithdrawRequested:
-        return "Withdrawal Requested";
-      case UserDepositState.WithdrawReady:
-        return "Ready to Withdraw";
-      default:
-        return "Unknown";
-    }
-  };
-
-  const getStateColor = (state: UserDepositState) => {
-    switch (state) {
-      case UserDepositState.Deposited:
-        return "text-green-600";
-      case UserDepositState.WithdrawRequested:
-        return "text-yellow-600";
-      case UserDepositState.WithdrawReady:
-        return "text-primary-apollo";
-      default:
-        return "text-gray-600";
-    }
-  };
-
-  const getRemainingTime = (unlockSlot: number, depositSlot: number) => {
-    const currentSlot =
-      depositSlot + Math.floor((Date.now() / 1000 - depositSlot) * 0.4);
-    const remainingSlots = Math.max(0, unlockSlot - currentSlot);
-    const remainingDays = Math.ceil(remainingSlots / (2 * 60 * 24));
-
-    return `${remainingDays} days`;
-  };
+  useEffect(() => {
+    mutateUserDeposit();
+  }, [solanaWalletConnected, mutateUserDeposit]);
 
   return (
     <main className="page-content ds">
@@ -70,10 +69,8 @@ export default function DashboardPage() {
 
         {userDeposit ? (
           <div className="grid gap-8 md:grid-cols-3">
-            {/* Main deposit card */}
             <div className="md:col-span-2">
               <div className="overflow-hidden rounded-2xl border border-primary-apollo/10 bg-white shadow-lg">
-                {/* Card header */}
                 <div className="bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-6">
                   <div className="mb-2 flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-shade-primary md:text-xl">
@@ -93,7 +90,7 @@ export default function DashboardPage() {
                           Amount Deposited
                         </span>
                         <p className="text-xl font-bold text-shade-primary">
-                          {formatCurrency(userDeposit.amount)}
+                          {userDeposit.amount.toLocaleString()} zBTC
                         </p>
                       </div>
                       <div className="hidden h-10 w-px bg-primary-apollo/10 md:block"></div>
@@ -102,14 +99,13 @@ export default function DashboardPage() {
                           Interest Received
                         </span>
                         <p className="text-xl font-bold text-green-600">
-                          {formatCurrency(userDeposit.interestReceived)}
+                          {userDeposit.interestReceived.toLocaleString()} USDC
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Card body */}
                 <div className="p-6">
                   <div className="grid gap-6 md:grid-cols-2">
                     <div className="space-y-4">
@@ -233,7 +229,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Summary card */}
             <div>
               <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg">
                 <h2 className="mb-4 text-lg font-semibold text-shade-primary">
@@ -244,14 +239,14 @@ export default function DashboardPage() {
                   <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
                     <span className="text-shade-secondary">Principal</span>
                     <span className="font-medium text-shade-primary">
-                      {formatCurrency(userDeposit.amount)}
+                      {userDeposit.amount.toLocaleString()} zBTC
                     </span>
                   </div>
 
                   <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
                     <span className="text-shade-secondary">Interest</span>
                     <span className="font-medium text-green-600">
-                      {formatCurrency(userDeposit.interestReceived)}
+                      {userDeposit.interestReceived.toLocaleString()} USDC
                     </span>
                   </div>
 
@@ -276,9 +271,8 @@ export default function DashboardPage() {
                       Total Value
                     </span>
                     <span className="text-2xl font-bold text-shade-primary">
-                      {formatCurrency(
-                        userDeposit.amount + userDeposit.interestReceived
-                      )}
+                      {userDeposit.amount.toLocaleString()} zBTC +{" "}
+                      {userDeposit.interestReceived.toLocaleString()} USDC
                     </span>
                   </div>
                 </div>
