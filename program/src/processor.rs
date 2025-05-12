@@ -20,9 +20,9 @@ use crate::{
 };
 
 // PDA seeds
-const CONFIG_SEED: &[u8] = b"pool_config";
-const AUTHORITY_SEED: &[u8] = b"authority";
-const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
+pub const CONFIG_SEED: &[u8] = b"pool_config";
+pub const AUTHORITY_SEED: &[u8] = b"authority";
+pub const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
 
 pub const MS_PER_SLOT: u64 = 440;
 pub const SLOTS_PER_SEC: f64 = 1000.0 / MS_PER_SLOT as f64;
@@ -32,19 +32,19 @@ pub const SLOTS_PER_YEAR: f64 = SLOTS_PER_SEC * 365.0 * 24.0 * 60.0 * 60.0;
 #[cfg(feature = "testnet")]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
+        solana_program::declare_id!("EjYMbwtvCjAdMB2RPu45QKPBEE5gTPSJBktzTro5VigV");
     }
 }
 #[cfg(feature = "devnet")]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
+        solana_program::declare_id!("EjYMbwtvCjAdMB2RPu45QKPBEE5gTPSJBktzTro5VigV");
     }
 }
 #[cfg(not(any(feature = "testnet", feature = "devnet")))]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
+        solana_program::declare_id!("EjYMbwtvCjAdMB2RPu45QKPBEE5gTPSJBktzTro5VigV");
     }
 }
 

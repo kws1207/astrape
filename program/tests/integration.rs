@@ -2,7 +2,9 @@ use {
     borsh::{BorshDeserialize, BorshSerialize},
     breakout_contract::{
         instructions::TokenLockInstruction,
-        processor::{Processor, SLOTS_PER_MONTH},
+        processor::{
+            Processor, AUTHORITY_SEED, CONFIG_SEED, SLOTS_PER_MONTH, WITHDRAWAL_POOL_SEED,
+        },
         state::{AstrapeConfig, UserDeposit, UserDepositState},
     },
     solana_program::{
@@ -28,9 +30,6 @@ use {
 
 // Constants for testing
 const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
-const CONFIG_SEED: &[u8] = b"pool_config";
-const AUTHORITY_SEED: &[u8] = b"authority";
-const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
 
 // Test helper struct
 struct TestHelper {
@@ -55,10 +54,10 @@ impl TestHelper {
     async fn new(program_test: &mut ProgramTest) -> Self {
         // Set up admin account (using a new keypair since we don't have access to hardcoded admin key)
         let admin = Keypair::from_bytes(&[
-            149, 229, 119, 82, 34, 62, 201, 51, 142, 29, 30, 249, 24, 160, 67, 255, 139, 31, 108,
-            77, 75, 206, 131, 136, 36, 127, 203, 214, 160, 32, 50, 69, 46, 208, 162, 119, 183, 186,
-            128, 232, 68, 141, 188, 0, 73, 54, 6, 19, 161, 241, 112, 199, 148, 74, 34, 170, 252,
-            74, 116, 181, 85, 187, 128, 210,
+            97, 207, 117, 213, 126, 4, 83, 204, 14, 192, 150, 163, 42, 207, 232, 166, 98, 53, 10,
+            124, 164, 132, 86, 113, 81, 3, 81, 125, 39, 72, 68, 202, 204, 13, 199, 8, 228, 122,
+            171, 83, 131, 50, 27, 157, 206, 153, 164, 34, 8, 61, 202, 12, 178, 68, 104, 155, 158,
+            142, 181, 94, 56, 2, 237, 86,
         ])
         .unwrap();
         let program_id = breakout_contract::id();
