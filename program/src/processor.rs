@@ -21,26 +21,30 @@ use crate::{
 
 // PDA seeds
 const CONFIG_SEED: &[u8] = b"pool_config";
-const STATE_SEED: &[u8] = b"pool_state";
 const AUTHORITY_SEED: &[u8] = b"authority";
 const WITHDRAWAL_POOL_SEED: &[u8] = b"withdrawal_pool";
+
+pub const MS_PER_SLOT: u64 = 440;
+pub const SLOTS_PER_SEC: f64 = 1000.0 / MS_PER_SLOT as f64;
+pub const SLOTS_PER_MONTH: f64 = SLOTS_PER_SEC * 30.0 * 24.0 * 60.0 * 60.0;
+pub const SLOTS_PER_YEAR: f64 = SLOTS_PER_SEC * 365.0 * 24.0 * 60.0 * 60.0;
 
 #[cfg(feature = "testnet")]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("75KWb5XcqPTgacQyNw9P5QU2HL3xpezEVcgsFCiJgTT");
+        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
     }
 }
 #[cfg(feature = "devnet")]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("Adm29NctkKwJGaaiU8CXqdV6WDTwR81JbxV8zoxn745Y");
+        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
     }
 }
 #[cfg(not(any(feature = "testnet", feature = "devnet")))]
 pub mod config_feature {
     pub mod admin {
-        solana_program::declare_id!("GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ");
+        solana_program::declare_id!("49kGkmCTeGJhgKAQc1tE7LxvoZocdNPYpRC7vKiZQ3ry");
     }
 }
 
@@ -188,26 +192,36 @@ impl Processor {
         Ok(())
     }
 
-    fn calculate_interest_amount(
+    pub fn calculate_interest_amount(
         amount: u64,
         commission_rate: u64,
         deposit_period: u64,
         config: &AstrapeConfig,
     ) -> u64 {
-        amount / 100
+        let collateral_value_in_interest = amount * config.price_factor;
+        let base_interest_rate = config.base_interest_rate as f64 / 1000.0;
+        let deposit_period_in_years = deposit_period as f64 / SLOTS_PER_YEAR;
+        let ratio_without_commission = (1000.0 - commission_rate as f64) / 1000.0;
+
+        let interest = collateral_value_in_interest as f64
+            * (1.0 + base_interest_rate)
+            * deposit_period_in_years
+            * ratio_without_commission;
+
+        interest as u64
     }
 
-    fn calculate_interest_to_return(
-        amount: u64,
-        deposit_slot: u64,
-        unlock_slot: u64,
+    pub fn calculate_interest_to_return(
+        user_deposit: &UserDeposit,
         current_slot: u64,
     ) -> Result<u64, TokenLockError> {
         // Calculate remaining interest to be returned based on actual lock duration
-        let actual_lock_duration = current_slot - deposit_slot;
-        let total_lock_duration = unlock_slot - deposit_slot;
+        let actual_lock_duration = current_slot - user_deposit.deposit_slot;
+        let total_lock_duration = user_deposit.unlock_slot - user_deposit.deposit_slot;
 
-        let interest_to_return = match (amount as u128).checked_mul(actual_lock_duration as u128) {
+        let interest_to_return = match (user_deposit.interest_received as u128)
+            .checked_mul(actual_lock_duration as u128)
+        {
             Some(v) => v,
             None => return Err(TokenLockError::ArithmeticOverflow.into()),
         };
@@ -250,8 +264,7 @@ impl Processor {
         let rent_account_info = next_account_info(account_info_iter)?;
 
         // Verify admin
-        if !admin_info.is_signer {
-            //|| config_feature::admin::id() != *admin_info.key {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             msg!("Admin must be a signer");
             return Err(TokenLockError::SignerRequired.into());
         }
@@ -468,7 +481,7 @@ impl Processor {
             max_commission_rate,
             min_deposit_amount,
             max_deposit_amount,
-            deposit_period: deposit_periods,
+            deposit_periods,
         };
         let mut config_data = config_info.data.borrow_mut();
         let mut dst = &mut config_data[..];
@@ -494,7 +507,7 @@ impl Processor {
         let config_info = next_account_info(account_info_iter)?;
 
         // Verify admin
-        if !admin_info.is_signer {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             msg!("Admin must be a signer");
             return Err(TokenLockError::SignerRequired.into());
         }
@@ -583,7 +596,7 @@ impl Processor {
                         msg!("Deposit periods cannot be empty");
                         return Err(TokenLockError::InvalidInput.into());
                     }
-                    config.deposit_period = periods.clone();
+                    config.deposit_periods = periods.clone();
                     msg!("Updated deposit periods to {:?}", periods);
                 }
             }
@@ -614,7 +627,7 @@ impl Processor {
         let ata_program_info = next_account_info(account_info_iter)?;
 
         // Verify admin
-        if !admin_info.is_signer {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
@@ -697,7 +710,7 @@ impl Processor {
 
         // Verify admin
         // For testing purposes, just verify the signer
-        if !admin_info.is_signer {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
@@ -773,7 +786,7 @@ impl Processor {
 
         // Verify admin
         // For testing purposes, just verify the signer
-        if !admin_info.is_signer {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
@@ -830,7 +843,7 @@ impl Processor {
 
         // Verify admin
         // For testing purposes, just verify the signer
-        if !admin_info.is_signer {
+        if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
@@ -990,11 +1003,11 @@ impl Processor {
         }
 
         // Verify lock period is valid
-        if !config.deposit_period.contains(&deposit_period) {
+        if !config.deposit_periods.contains(&deposit_period) {
             msg!(
                 "Invalid lock period: period={}, allowed periods={:?}",
                 deposit_period,
-                config.deposit_period
+                config.deposit_periods
             );
             return Err(TokenLockError::InvalidLockPeriod(deposit_period).into());
         }
@@ -1105,12 +1118,7 @@ impl Processor {
             return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
         }
 
-        let interest_to_return = Self::calculate_interest_to_return(
-            deposit.amount,
-            deposit.deposit_slot,
-            deposit.unlock_slot,
-            clock.slot,
-        )?;
+        let interest_to_return = Self::calculate_interest_to_return(&deposit, clock.slot)?;
 
         // Check if user has enough interest tokens to return
         let user_interest_balance =
