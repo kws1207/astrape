@@ -10,6 +10,7 @@ import BN from "bn.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 
 import { BitcoinAddress, BitcoinXOnlyPublicKey } from "@/types/wallet";
+import { ASTRAPE_PROGRAM_ID, deriveAuthorityPDA } from "@/utils/pda";
 
 import { AccountService } from "./account";
 import { InstructionService } from "./instruction";
@@ -43,14 +44,7 @@ export class ZplClient {
     this.assetMint = new PublicKey(assetMint);
 
     // Set Astrape program ID
-    if (process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58) {
-      this.astrapeProgramId = new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
-      );
-    } else {
-      // throw new Error("Astrape program address is not set");
-      this.astrapeProgramId = new PublicKey("11111111111111111111111111111111");
-    }
+    this.astrapeProgramId = ASTRAPE_PROGRAM_ID;
 
     this.accountService = new AccountService(
       connection,
@@ -222,8 +216,8 @@ export class ZplClient {
     );
   }
 
-  async getPoolConfig() {
-    return this.rpcClient.getPoolConfig();
+  async getAstrapeConfig() {
+    return this.rpcClient.getAstrapeConfig();
   }
 
   async getUserDeposit() {
@@ -253,11 +247,19 @@ export class ZplClient {
   }
 
   async getPoolStateAccount(): Promise<PublicKey> {
-    const [stateAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pool_state")],
+    const [configPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pool_config")],
       this.astrapeProgramId
     );
-    return stateAccount;
+    return configPDA;
+  }
+
+  async getWithdrawalPoolAccount(): Promise<PublicKey> {
+    const [withdrawalPool] = PublicKey.findProgramAddressSync(
+      [Buffer.from("withdrawal_pool")],
+      this.astrapeProgramId
+    );
+    return withdrawalPool;
   }
 
   async getUserCollateralAccount(): Promise<PublicKey> {
@@ -265,20 +267,22 @@ export class ZplClient {
       throw new Error("Wallet not connected");
     }
 
-    const poolConfig = await this.getPoolConfig();
+    const astrapeConfig = await this.getAstrapeConfig();
     return getAssociatedTokenAddressSync(
-      poolConfig.collateralMint,
+      astrapeConfig.collateralMint,
       this.walletPublicKey
     );
   }
 
   async getPoolCollateralAccount(): Promise<PublicKey> {
-    const poolConfig = await this.getPoolConfig();
-    const [collateralPool] = PublicKey.findProgramAddressSync(
-      [Buffer.from("collateral_pool"), poolConfig.collateralMint.toBuffer()],
-      this.astrapeProgramId
+    const astrapeConfig = await this.getAstrapeConfig();
+    const [authorityPDA] = deriveAuthorityPDA();
+    // authorityPDA is off-curve → allowOwnerOffCurve = true
+    return getAssociatedTokenAddressSync(
+      astrapeConfig.collateralMint,
+      authorityPDA,
+      true
     );
-    return collateralPool;
   }
 
   async getUserInterestAccount(): Promise<PublicKey> {
@@ -286,19 +290,20 @@ export class ZplClient {
       throw new Error("Wallet not connected");
     }
 
-    const poolConfig = await this.getPoolConfig();
+    const astrapeConfig = await this.getAstrapeConfig();
     return getAssociatedTokenAddressSync(
-      poolConfig.interestMint,
+      astrapeConfig.interestMint,
       this.walletPublicKey
     );
   }
 
   async getPoolInterestAccount(): Promise<PublicKey> {
-    const poolConfig = await this.getPoolConfig();
-    const [interestPool] = PublicKey.findProgramAddressSync(
-      [Buffer.from("interest_pool"), poolConfig.interestMint.toBuffer()],
-      this.astrapeProgramId
+    const astrapeConfig = await this.getAstrapeConfig();
+    const [authorityPDA] = deriveAuthorityPDA();
+    return getAssociatedTokenAddressSync(
+      astrapeConfig.interestMint,
+      authorityPDA,
+      true
     );
-    return interestPool;
   }
 }

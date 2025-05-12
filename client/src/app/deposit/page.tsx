@@ -24,9 +24,9 @@ const depositPeriodsDisplayText: Record<DepositPeriod, string> = {
 };
 
 const slotCountMap: Record<DepositPeriod, number> = {
-  "1M": 1,
-  "3M": 3,
-  "6M": 6,
+  "1M": 5890909,
+  "3M": 17672727,
+  "6M": 35345454,
 };
 
 // Calculate optimal APY based on amount in USD
@@ -73,12 +73,19 @@ export default function DepositPage() {
   };
 
   const onClickDeposit = () => {
-    astrape.deposit(depositAmount, slotCountMap[depositPeriod]);
+    // Default commission rate is 20% (20)
+    const commissionRate = 20;
+    console.log(riskBuffer, commissionRate + riskBuffer);
+    astrape.deposit(
+      depositAmount,
+      slotCountMap[depositPeriod],
+      commissionRate + riskBuffer
+    );
   };
 
   const usdAmount = useMemo(() => {
-    return depositAmount * (astrape.poolConfig?.priceFactor || 100000);
-  }, [depositAmount, astrape.poolConfig?.priceFactor]);
+    return depositAmount * (astrape.config?.priceFactor || 100000);
+  }, [depositAmount, astrape.config?.priceFactor]);
 
   const currentAPY = useMemo(() => {
     return calculateOptimalAPY(usdAmount);

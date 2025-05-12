@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
 export class TokenLockInstruction {
-  static AdminCreateConfig({
+  static Initialize({
     interest_mint,
     collateral_mint,
     base_interest_rate,
@@ -22,7 +22,7 @@ export class TokenLockInstruction {
     max_deposit_amount: number;
     deposit_periods: number[];
   }): TokenLockInstruction {
-    return new TokenLockInstruction("AdminCreateConfig", {
+    return new TokenLockInstruction("Initialize", {
       interest_mint,
       collateral_mint,
       base_interest_rate,
@@ -39,15 +39,30 @@ export class TokenLockInstruction {
     param,
     base_interest_rate,
     price_factor,
+    min_commission_rate,
+    max_commission_rate,
+    min_deposit_amount,
+    max_deposit_amount,
+    deposit_periods,
   }: {
     param: number;
     base_interest_rate?: number;
     price_factor?: number;
+    min_commission_rate?: number;
+    max_commission_rate?: number;
+    min_deposit_amount?: number;
+    max_deposit_amount?: number;
+    deposit_periods?: number[];
   }): TokenLockInstruction {
     return new TokenLockInstruction("AdminUpdateConfig", {
       param,
       base_interest_rate,
       price_factor,
+      min_commission_rate,
+      max_commission_rate,
+      min_deposit_amount,
+      max_deposit_amount,
+      deposit_periods,
     });
   }
 
@@ -55,16 +70,8 @@ export class TokenLockInstruction {
     return new TokenLockInstruction("AdminWithdrawCollateralForInvestment", {});
   }
 
-  static AdminUpdateDepositStates(): TokenLockInstruction {
-    return new TokenLockInstruction("AdminUpdateDepositStates", {});
-  }
-
-  static AdminPrepareWithdrawal({
-    user_pubkey,
-  }: {
-    user_pubkey: PublicKey;
-  }): TokenLockInstruction {
-    return new TokenLockInstruction("AdminPrepareWithdrawal", { user_pubkey });
+  static AdminPrepareWithdrawal(): TokenLockInstruction {
+    return new TokenLockInstruction("AdminPrepareWithdrawal", {});
   }
 
   static AdminDepositInterest({
@@ -84,11 +91,23 @@ export class TokenLockInstruction {
   }
 
   static DepositCollateral({
-    unlock_slot,
+    amount,
+    deposit_period,
+    commission_rate,
   }: {
-    unlock_slot: number;
+    amount: number;
+    deposit_period: number;
+    commission_rate: number;
   }): TokenLockInstruction {
-    return new TokenLockInstruction("DepositCollateral", { unlock_slot });
+    return new TokenLockInstruction("DepositCollateral", {
+      amount,
+      deposit_period,
+      commission_rate,
+    });
+  }
+
+  static RequestWithdrawalEarly(): TokenLockInstruction {
+    return new TokenLockInstruction("RequestWithdrawalEarly", {});
   }
 
   static RequestWithdrawal(): TokenLockInstruction {
@@ -104,15 +123,19 @@ export class TokenLockInstruction {
     public readonly params: Record<string, unknown>
   ) {}
 
-  private numberToLEBytes(num: number): Uint8Array {
-    return new Uint8Array(new BigUint64Array([BigInt(num)]).buffer);
+  private numberToLEBytes(num: number, decimals: number = 9): Uint8Array {
+    // Convert to integer before creating BigInt
+    // Different parameters need different decimal precision
+    // Token amounts typically use 9 decimals, rates may use 0-2 decimals
+    const intValue = Math.round(num * Math.pow(10, decimals));
+    return new Uint8Array(new BigUint64Array([BigInt(intValue)]).buffer);
   }
 
   pack(): Buffer {
     const buffer: number[] = [];
 
     switch (this.type) {
-      case "AdminCreateConfig": {
+      case "Initialize": {
         const {
           interest_mint,
           collateral_mint,
@@ -135,7 +158,7 @@ export class TokenLockInstruction {
           deposit_periods: number[];
         };
 
-        buffer.push(0);
+        buffer.push(0); // Instruction code for Initialize
 
         const interestMintBytes = interest_mint.toBytes();
         for (let i = 0; i < interestMintBytes.length; i++) {
@@ -147,10 +170,10 @@ export class TokenLockInstruction {
           buffer.push(collateralMintBytes[i]);
         }
 
-        const baseInterestBytes = this.numberToLEBytes(base_interest_rate);
+        const baseInterestBytes = this.numberToLEBytes(base_interest_rate, 0);
         const priceFactorBytes = this.numberToLEBytes(price_factor);
-        const minCommissionBytes = this.numberToLEBytes(min_commission_rate);
-        const maxCommissionBytes = this.numberToLEBytes(max_commission_rate);
+        const minCommissionBytes = this.numberToLEBytes(min_commission_rate, 0);
+        const maxCommissionBytes = this.numberToLEBytes(max_commission_rate, 0);
         const minDepositBytes = this.numberToLEBytes(min_deposit_amount);
         const maxDepositBytes = this.numberToLEBytes(max_deposit_amount);
 
@@ -169,25 +192,39 @@ export class TokenLockInstruction {
 
         // Encode deposit periods
         for (const period of deposit_periods) {
-          const periodBytes = this.numberToLEBytes(period);
+          const periodBytes = this.numberToLEBytes(period, 0);
           for (let i = 0; i < periodBytes.length; i++)
             buffer.push(periodBytes[i]);
         }
         break;
       }
       case "AdminUpdateConfig": {
-        const { param, base_interest_rate, price_factor } = this.params as {
+        const {
+          param,
+          base_interest_rate,
+          price_factor,
+          min_commission_rate,
+          max_commission_rate,
+          min_deposit_amount,
+          max_deposit_amount,
+          deposit_periods,
+        } = this.params as {
           param: number;
           base_interest_rate?: number;
           price_factor?: number;
+          min_commission_rate?: number;
+          max_commission_rate?: number;
+          min_deposit_amount?: number;
+          max_deposit_amount?: number;
+          deposit_periods?: number[];
         };
 
-        buffer.push(1);
+        buffer.push(1); // Instruction code for AdminUpdateConfig
         buffer.push(param);
 
         if (base_interest_rate !== undefined) {
           buffer.push(1);
-          const rateBytes = this.numberToLEBytes(base_interest_rate);
+          const rateBytes = this.numberToLEBytes(base_interest_rate, 0);
           for (let i = 0; i < rateBytes.length; i++) buffer.push(rateBytes[i]);
         } else {
           buffer.push(0);
@@ -201,30 +238,66 @@ export class TokenLockInstruction {
         } else {
           buffer.push(0);
         }
-        break;
-      }
-      case "AdminWithdrawCollateralForInvestment": {
-        buffer.push(2);
-        break;
-      }
-      case "AdminUpdateDepositStates": {
-        buffer.push(3);
-        break;
-      }
-      case "AdminPrepareWithdrawal": {
-        const { user_pubkey } = this.params as { user_pubkey: PublicKey };
-        buffer.push(4);
 
-        const userPubkeyBytes = user_pubkey.toBytes();
-        for (let i = 0; i < userPubkeyBytes.length; i++) {
-          buffer.push(userPubkeyBytes[i]);
+        if (min_commission_rate !== undefined) {
+          buffer.push(1);
+          const rateBytes = this.numberToLEBytes(min_commission_rate, 0);
+          for (let i = 0; i < rateBytes.length; i++) buffer.push(rateBytes[i]);
+        } else {
+          buffer.push(0);
+        }
+
+        if (max_commission_rate !== undefined) {
+          buffer.push(1);
+          const rateBytes = this.numberToLEBytes(max_commission_rate, 0);
+          for (let i = 0; i < rateBytes.length; i++) buffer.push(rateBytes[i]);
+        } else {
+          buffer.push(0);
+        }
+
+        if (min_deposit_amount !== undefined) {
+          buffer.push(1);
+          const amountBytes = this.numberToLEBytes(min_deposit_amount);
+          for (let i = 0; i < amountBytes.length; i++)
+            buffer.push(amountBytes[i]);
+        } else {
+          buffer.push(0);
+        }
+
+        if (max_deposit_amount !== undefined) {
+          buffer.push(1);
+          const amountBytes = this.numberToLEBytes(max_deposit_amount);
+          for (let i = 0; i < amountBytes.length; i++)
+            buffer.push(amountBytes[i]);
+        } else {
+          buffer.push(0);
+        }
+
+        if (deposit_periods !== undefined) {
+          buffer.push(1);
+          // Encode deposit periods
+          for (const period of deposit_periods) {
+            const periodBytes = this.numberToLEBytes(period, 0);
+            for (let i = 0; i < periodBytes.length; i++)
+              buffer.push(periodBytes[i]);
+          }
+        } else {
+          buffer.push(0);
         }
 
         break;
       }
+      case "AdminWithdrawCollateralForInvestment": {
+        buffer.push(2); // Instruction code for AdminWithdrawCollateralForInvestment
+        break;
+      }
+      case "AdminPrepareWithdrawal": {
+        buffer.push(3); // Instruction code for AdminPrepareWithdrawal
+        break;
+      }
       case "AdminDepositInterest": {
         const { amount } = this.params as { amount: number };
-        buffer.push(5);
+        buffer.push(4); // Instruction code for AdminDepositInterest
         const amountBytes = this.numberToLEBytes(amount);
         for (let i = 0; i < amountBytes.length; i++)
           buffer.push(amountBytes[i]);
@@ -232,25 +305,43 @@ export class TokenLockInstruction {
       }
       case "AdminWithdrawInterest": {
         const { amount } = this.params as { amount: number };
-        buffer.push(6);
+        buffer.push(5); // Instruction code for AdminWithdrawInterest
         const amountBytes = this.numberToLEBytes(amount);
         for (let i = 0; i < amountBytes.length; i++)
           buffer.push(amountBytes[i]);
         break;
       }
       case "DepositCollateral": {
-        const { unlock_slot } = this.params as { unlock_slot: number };
-        buffer.push(7);
-        const slotBytes = this.numberToLEBytes(unlock_slot);
-        for (let i = 0; i < slotBytes.length; i++) buffer.push(slotBytes[i]);
+        const { amount, deposit_period, commission_rate } = this.params as {
+          amount: number;
+          deposit_period: number;
+          commission_rate: number;
+        };
+        buffer.push(6); // Instruction code for DepositCollateral
+
+        const amountBytes = this.numberToLEBytes(amount);
+        for (let i = 0; i < amountBytes.length; i++)
+          buffer.push(amountBytes[i]);
+
+        const periodBytes = this.numberToLEBytes(deposit_period, 0);
+        for (let i = 0; i < periodBytes.length; i++)
+          buffer.push(periodBytes[i]);
+
+        const commissionBytes = this.numberToLEBytes(commission_rate, 1); // No decimals for commission rate
+        for (let i = 0; i < commissionBytes.length; i++)
+          buffer.push(commissionBytes[i]);
+        break;
+      }
+      case "RequestWithdrawalEarly": {
+        buffer.push(7); // Instruction code for RequestWithdrawalEarly
         break;
       }
       case "RequestWithdrawal": {
-        buffer.push(8);
+        buffer.push(8); // Instruction code for RequestWithdrawal
         break;
       }
       case "WithdrawCollateral": {
-        buffer.push(9);
+        buffer.push(9); // Instruction code for WithdrawCollateral
         break;
       }
     }

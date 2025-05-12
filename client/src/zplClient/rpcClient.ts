@@ -6,12 +6,14 @@ import {
   TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
+  SendTransactionError,
 } from "@solana/web3.js";
 import {
-  deserializePoolConfig,
-  deserializePoolState,
+  deserializeAstrapeConfig,
+  deserializeUserDeposit,
   UserDepositState,
 } from "../types/astrape";
+import { deriveConfigPDA, deriveUserDepositPDA } from "@/utils/pda";
 
 export class RpcClient {
   constructor(
@@ -47,12 +49,26 @@ export class RpcClient {
 
     const signedTx = await signTransaction(tx);
 
-    const signature = await this.connection.sendRawTransaction(
-      signedTx.serialize(),
-      {
-        preflightCommitment: "confirmed",
+    let signature: string;
+    try {
+      signature = await this.connection.sendRawTransaction(
+        signedTx.serialize(),
+        {
+          preflightCommitment: "confirmed",
+        }
+      );
+    } catch (error: unknown) {
+      if (error instanceof SendTransactionError) {
+        try {
+          // Retrieve and output the transaction logs for easier debugging
+          const logs = await error.getLogs(this.connection);
+          console.error("SendTransactionError logs:", logs);
+        } catch (logErr) {
+          console.error("Failed to retrieve transaction logs", logErr);
+        }
       }
-    );
+      throw error;
+    }
 
     await this.connection.confirmTransaction(
       {
@@ -75,43 +91,49 @@ export class RpcClient {
     return blockTime;
   }
 
-  async getPoolConfig() {
-    if (
-      !process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
-    ) {
-      // throw new Error("Astrape program address is not set");
+  async getAstrapeConfig() {
+    const [configPDA] = deriveConfigPDA();
+    console.log("configPDA", configPDA.toBase58());
+
+    try {
+      const astrapeAccount = await this.connection.getAccountInfo(configPDA);
+
+      if (!astrapeAccount?.data)
+        throw new Error("Failed to fetch Astrape account data");
+
+      const astrapeConfig = deserializeAstrapeConfig(astrapeAccount.data);
+      console.log("astrapeConfig", astrapeConfig);
+      return astrapeConfig;
+    } catch {
+      // Fallback for testing/development
       return {
-        admin: new PublicKey("11111111111111111111111111111111"),
         interestMint: new PublicKey("11111111111111111111111111111111"),
         collateralMint: new PublicKey("11111111111111111111111111111111"),
-        priceFactor: 0,
         baseInterestRate: 0,
+        priceFactor: 0,
         minCommissionRate: 0,
         maxCommissionRate: 0,
         minDepositAmount: 0,
         maxDepositAmount: 0,
-        depositPeriod: [0],
+        depositPeriods: [0],
       };
     }
-
-    const astrapeAccount = await this.connection.getAccountInfo(
-      new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
-      )
-    );
-
-    if (!astrapeAccount?.data)
-      throw new Error("Failed to fetch Astrape account data");
-
-    const poolConfig = deserializePoolConfig(astrapeAccount.data);
-
-    return poolConfig;
   }
 
   async getUserDeposit() {
     if (!this.walletPublicKey) throw new Error("Wallet is not connected");
-    if (!process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_STATE_ACCOUNT_ADDRESS_BASE58) {
-      // throw new Error("Astrape program address is not set");
+
+    const [userDepositPDA] = deriveUserDepositPDA(this.walletPublicKey);
+
+    try {
+      const deposits = await this.connection.getAccountInfo(userDepositPDA);
+
+      if (!deposits?.data) throw new Error("Failed to fetch user deposit");
+
+      const userDepositData = deserializeUserDeposit(deposits.data);
+      return userDepositData;
+    } catch {
+      // Fallback for testing/development
       return {
         amount: 1,
         depositSlot: 366_202_735,
@@ -121,16 +143,5 @@ export class RpcClient {
         commissionRate: 20,
       };
     }
-    const deposits = await this.connection.getAccountInfo(
-      new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_STATE_ACCOUNT_ADDRESS_BASE58
-      )
-    );
-
-    if (!deposits?.data) throw new Error("Failed to fetch user deposit");
-
-    const depositsData = deserializePoolState(deposits.data);
-
-    return depositsData.deposits.get(this.walletPublicKey.toBase58());
   }
 }

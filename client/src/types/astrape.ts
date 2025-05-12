@@ -2,41 +2,40 @@ import * as borsh from "@coral-xyz/borsh";
 import { Structure } from "@solana/buffer-layout";
 import { PublicKey } from "@solana/web3.js";
 
-export interface PoolConfig {
-  admin: PublicKey;
+export interface AstrapeConfig {
   interestMint: PublicKey;
   collateralMint: PublicKey;
-  priceFactor: number;
   baseInterestRate: number;
+  priceFactor: number;
   minCommissionRate: number;
   maxCommissionRate: number;
   minDepositAmount: number;
   maxDepositAmount: number;
-  depositPeriod: number[];
+  depositPeriods: number[];
 }
 
-export const poolConfigSchema: Structure<PoolConfig> = borsh.struct([
-  borsh.publicKey("admin"),
+export const astrapeConfigSchema: Structure<AstrapeConfig> = borsh.struct([
   borsh.publicKey("interestMint"),
   borsh.publicKey("collateralMint"),
-  borsh.u64("priceFactor"),
   borsh.u64("baseInterestRate"),
+  borsh.u64("priceFactor"),
   borsh.u64("minCommissionRate"),
   borsh.u64("maxCommissionRate"),
   borsh.u64("minDepositAmount"),
   borsh.u64("maxDepositAmount"),
-  borsh.vec(borsh.u64(), "depositPeriod"),
+  borsh.vec(borsh.u64(), "depositPeriods"),
 ]);
 
-export function deserializePoolConfig(data: Buffer): PoolConfig {
+export function deserializeAstrapeConfig(data: Buffer): AstrapeConfig {
   if (!data) throw new Error("Data is undefined");
-  return poolConfigSchema.decode(data);
+  return astrapeConfigSchema.decode(data);
 }
 
 export enum UserDepositState {
   Deposited = 0,
   WithdrawRequested = 1,
   WithdrawReady = 2,
+  WithdrawCompleted = 3,
 }
 
 export interface UserDeposit {
@@ -52,6 +51,7 @@ export const userDepositStateSchema = borsh.rustEnum([
   borsh.struct([], "Deposited"),
   borsh.struct([], "WithdrawRequested"),
   borsh.struct([], "WithdrawReady"),
+  borsh.struct([], "WithdrawCompleted"),
 ]);
 
 export const userDepositSchema: Structure<UserDeposit> = borsh.struct([
@@ -62,6 +62,11 @@ export const userDepositSchema: Structure<UserDeposit> = borsh.struct([
   borsh.u8("state"),
   borsh.u64("commissionRate"),
 ]);
+
+export function deserializeUserDeposit(data: Buffer): UserDeposit {
+  if (!data) throw new Error("Data is undefined");
+  return userDepositSchema.decode(data);
+}
 
 export interface PoolState {
   deposits: Map<string, UserDeposit>;

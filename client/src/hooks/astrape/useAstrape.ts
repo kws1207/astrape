@@ -3,13 +3,19 @@ import { useZplClient } from "@/contexts/ZplClientProvider";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { TokenLockInstruction } from "@/program/instructions";
 import { useCallback } from "react";
+import {
+  ASTRAPE_PROGRAM_ID,
+  deriveAuthorityPDA,
+  deriveConfigPDA,
+  deriveUserDepositPDA,
+} from "@/utils/pda";
 
 export function useAstrape() {
   const zplClient = useZplClient();
-  const { data: poolConfig } = useSWR(
-    zplClient ? "poolConfig" : null,
+  const { data: config } = useSWR(
+    zplClient ? "astrapeConfig" : null,
     async () => {
-      const config = await zplClient?.getPoolConfig();
+      const config = await zplClient?.getAstrapeConfig();
       return config;
     },
     {
@@ -28,7 +34,7 @@ export function useAstrape() {
   );
 
   const deposit = useCallback(
-    async (amount: number, unlockSlot: number) => {
+    async (amount: number, depositPeriod: number, commissionRate: number) => {
       if (!zplClient) {
         throw new Error("ZPL client not initialized");
       }
@@ -38,30 +44,45 @@ export function useAstrape() {
         throw new Error("Wallet not connected");
       }
 
-      const astrapeProgramId = new PublicKey(
-        process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58 ||
-          ""
-      );
+      const astrapeProgramId = ASTRAPE_PROGRAM_ID;
 
-      const poolStateAccount = await zplClient.getPoolStateAccount();
+      // Get required accounts
+      const [configPDA] = deriveConfigPDA();
+      const [authorityPDA] = deriveAuthorityPDA();
+      const [userDepositPDA] = deriveUserDepositPDA(walletPublicKey);
 
       const userCollateralAccount = await zplClient.getUserCollateralAccount();
       const poolCollateralAccount = await zplClient.getPoolCollateralAccount();
       const userInterestAccount = await zplClient.getUserInterestAccount();
       const poolInterestAccount = await zplClient.getPoolInterestAccount();
+      const systemProgram = new PublicKey("11111111111111111111111111111111");
+      const tokenProgram = new PublicKey(
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+      );
 
+      // Create instruction data with all required fields
+      const instructionData = TokenLockInstruction.DepositCollateral({
+        amount,
+        deposit_period: depositPeriod,
+        commission_rate: commissionRate,
+      }).pack();
+
+      // Create instruction with correct account order
       const depositInstruction = new TransactionInstruction({
         programId: astrapeProgramId,
         keys: [
-          { pubkey: poolStateAccount, isSigner: false, isWritable: true },
+          { pubkey: walletPublicKey, isSigner: true, isWritable: true },
+          { pubkey: configPDA, isSigner: false, isWritable: false },
+          { pubkey: authorityPDA, isSigner: false, isWritable: false },
           { pubkey: userCollateralAccount, isSigner: false, isWritable: true },
+          { pubkey: userDepositPDA, isSigner: false, isWritable: true },
           { pubkey: poolCollateralAccount, isSigner: false, isWritable: true },
           { pubkey: userInterestAccount, isSigner: false, isWritable: true },
           { pubkey: poolInterestAccount, isSigner: false, isWritable: true },
+          { pubkey: systemProgram, isSigner: false, isWritable: false },
+          { pubkey: tokenProgram, isSigner: false, isWritable: false },
         ],
-        data: TokenLockInstruction.DepositCollateral({
-          unlock_slot: unlockSlot,
-        }).pack(),
+        data: instructionData,
       });
 
       return zplClient.signAndSendTransactionWithInstructions([
@@ -81,27 +102,71 @@ export function useAstrape() {
       throw new Error("Wallet not connected");
     }
 
-    const astrapeProgramId = new PublicKey(
-      process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58 ||
-        ""
-    );
+    const astrapeProgramId = ASTRAPE_PROGRAM_ID;
 
-    const poolStateAccount = await zplClient.getPoolStateAccount();
-    const userInterestAccount = await zplClient.getUserInterestAccount();
-    const poolInterestAccount = await zplClient.getPoolInterestAccount();
+    // Get the user deposit PDA
+    const [userDepositPDA] = deriveUserDepositPDA(walletPublicKey);
 
+    const instructionData = TokenLockInstruction.RequestWithdrawal().pack();
+
+    // Create instruction with correct account order (according to program)
     const requestWithdrawalInstruction = new TransactionInstruction({
       programId: astrapeProgramId,
       keys: [
-        { pubkey: poolStateAccount, isSigner: false, isWritable: true },
-        { pubkey: userInterestAccount, isSigner: false, isWritable: true },
-        { pubkey: poolInterestAccount, isSigner: false, isWritable: true },
+        { pubkey: walletPublicKey, isSigner: true, isWritable: true },
+        { pubkey: userDepositPDA, isSigner: false, isWritable: true },
       ],
-      data: TokenLockInstruction.RequestWithdrawal().pack(),
+      data: instructionData,
     });
 
     return zplClient.signAndSendTransactionWithInstructions([
       requestWithdrawalInstruction,
+    ]);
+  }, [zplClient]);
+
+  const requestWithdrawalEarly = useCallback(async () => {
+    if (!zplClient) {
+      throw new Error("ZPL client not initialized");
+    }
+
+    const walletPublicKey = zplClient.getWalletPublicKey();
+    if (!walletPublicKey) {
+      throw new Error("Wallet not connected");
+    }
+
+    const astrapeProgramId = ASTRAPE_PROGRAM_ID;
+
+    // Get required accounts
+    const [configPDA] = deriveConfigPDA();
+    const [authorityPDA] = deriveAuthorityPDA();
+    const [userDepositPDA] = deriveUserDepositPDA(walletPublicKey);
+
+    const userInterestAccount = await zplClient.getUserInterestAccount();
+    const poolInterestAccount = await zplClient.getPoolInterestAccount();
+    const tokenProgram = new PublicKey(
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    );
+
+    const instructionData =
+      TokenLockInstruction.RequestWithdrawalEarly().pack();
+
+    // Create instruction with correct account order
+    const requestWithdrawalEarlyInstruction = new TransactionInstruction({
+      programId: astrapeProgramId,
+      keys: [
+        { pubkey: walletPublicKey, isSigner: true, isWritable: true },
+        { pubkey: configPDA, isSigner: false, isWritable: false },
+        { pubkey: authorityPDA, isSigner: false, isWritable: false },
+        { pubkey: userDepositPDA, isSigner: false, isWritable: true },
+        { pubkey: userInterestAccount, isSigner: false, isWritable: true },
+        { pubkey: poolInterestAccount, isSigner: false, isWritable: true },
+        { pubkey: tokenProgram, isSigner: false, isWritable: false },
+      ],
+      data: instructionData,
+    });
+
+    return zplClient.signAndSendTransactionWithInstructions([
+      requestWithdrawalEarlyInstruction,
     ]);
   }, [zplClient]);
 
@@ -115,21 +180,29 @@ export function useAstrape() {
       throw new Error("Wallet not connected");
     }
 
-    const astrapeProgramId = new PublicKey(
-      process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58 ||
-        ""
-    );
+    const astrapeProgramId = ASTRAPE_PROGRAM_ID;
 
-    const poolStateAccount = await zplClient.getPoolStateAccount();
+    // Get required accounts
+    const [configPDA] = deriveConfigPDA();
+    const [authorityPDA] = deriveAuthorityPDA();
+    const [userDepositPDA] = deriveUserDepositPDA(walletPublicKey);
+
     const userCollateralAccount = await zplClient.getUserCollateralAccount();
-    const poolCollateralAccount = await zplClient.getPoolCollateralAccount();
+    const withdrawalPoolAccount = await zplClient.getWithdrawalPoolAccount();
+    const tokenProgram = new PublicKey(
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    );
 
     const withdrawCollateralInstruction = new TransactionInstruction({
       programId: astrapeProgramId,
       keys: [
-        { pubkey: poolStateAccount, isSigner: false, isWritable: true },
+        { pubkey: walletPublicKey, isSigner: true, isWritable: true },
+        { pubkey: configPDA, isSigner: false, isWritable: false },
+        { pubkey: authorityPDA, isSigner: false, isWritable: false },
+        { pubkey: userDepositPDA, isSigner: false, isWritable: true },
         { pubkey: userCollateralAccount, isSigner: false, isWritable: true },
-        { pubkey: poolCollateralAccount, isSigner: false, isWritable: true },
+        { pubkey: withdrawalPoolAccount, isSigner: false, isWritable: true },
+        { pubkey: tokenProgram, isSigner: false, isWritable: false },
       ],
       data: TokenLockInstruction.WithdrawCollateral().pack(),
     });
@@ -140,9 +213,10 @@ export function useAstrape() {
   }, [zplClient]);
 
   return {
-    poolConfig,
+    config,
     deposit,
     requestWithdrawal,
+    requestWithdrawalEarly,
     withdrawCollateral,
     userDeposit,
     mutateUserDeposit,
