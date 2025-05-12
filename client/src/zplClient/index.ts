@@ -236,6 +236,22 @@ export class ZplClient {
     return this.walletPublicKey;
   }
 
+  async getCurrentSlot() {
+    return this.rpcClient.getCurrentSlot();
+  }
+
+  async getBlockTime(slot: number) {
+    for (let i = 0; i < 3; i++) {
+      try {
+        return await this.rpcClient.getBlockTime(slot + i);
+      } catch {
+        if (i === 2) {
+          return null;
+        }
+      }
+    }
+  }
+
   async getPoolStateAccount(): Promise<PublicKey> {
     const [stateAccount] = PublicKey.findProgramAddressSync(
       [Buffer.from("pool_state")],

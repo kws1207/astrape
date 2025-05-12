@@ -66,6 +66,15 @@ export class RpcClient {
     return signature;
   }
 
+  async getCurrentSlot() {
+    return await this.connection.getSlot();
+  }
+
+  async getBlockTime(slot: number) {
+    const blockTime = await this.connection.getBlockTime(slot);
+    return blockTime;
+  }
+
   async getPoolConfig() {
     if (
       !process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_CONFIG_ACCOUNT_ADDRESS_BASE58
@@ -104,12 +113,12 @@ export class RpcClient {
     if (!process.env.NEXT_PUBLIC_ASTRAPE_PROGRAM_STATE_ACCOUNT_ADDRESS_BASE58) {
       // throw new Error("Astrape program address is not set");
       return {
-        amount: 0,
-        depositSlot: 0,
-        unlockSlot: 0,
-        interestReceived: 0,
+        amount: 1,
+        depositSlot: 366_202_735,
+        unlockSlot: 382_702_735,
+        interestReceived: 4048,
         state: UserDepositState.Deposited,
-        commissionRate: 0,
+        commissionRate: 20,
       };
     }
     const deposits = await this.connection.getAccountInfo(

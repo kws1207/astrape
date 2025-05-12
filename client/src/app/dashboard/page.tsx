@@ -8,6 +8,7 @@ import Button from "@/components/Button/Button";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useState } from "react";
+import { useZplClient } from "@/contexts/ZplClientProvider";
 
 const getStateLabel = (state: UserDepositState) => {
   switch (state) {
@@ -35,18 +36,12 @@ const getStateColor = (state: UserDepositState) => {
   }
 };
 
-const getRemainingTime = (unlockSlot: number, depositSlot: number) => {
-  const currentSlot =
-    depositSlot + Math.floor((Date.now() / 1000 - depositSlot) * 0.4);
-  const remainingSlots = Math.max(0, unlockSlot - currentSlot);
-  const remainingDays = Math.ceil(remainingSlots / (2 * 60 * 24));
+const isBeforeUnlock = async (
+  unlockSlot: number,
 
-  return `${remainingDays} days`;
-};
-
-const isBeforeUnlock = (unlockSlot: number, depositSlot: number) => {
-  const currentSlot =
-    depositSlot + Math.floor((Date.now() / 1000 - depositSlot) * 0.4);
+  getCurrentSlot: () => Promise<number>
+) => {
+  const currentSlot = await getCurrentSlot();
   return currentSlot < unlockSlot;
 };
 
@@ -104,7 +99,7 @@ const DepositSummary = ({ userDeposit }: { userDeposit: UserDeposit }) => (
       <div className="flex justify-between border-b border-primary-apollo/5 pb-3">
         <span className="text-shade-secondary">Commission</span>
         <span className="font-medium text-shade-primary">
-          {(userDeposit.commissionRate / 10000).toFixed(2)}%
+          {userDeposit.commissionRate}%
         </span>
       </div>
 
@@ -163,90 +158,122 @@ const DepositDetails = ({ userDeposit }: { userDeposit: UserDeposit }) => (
   </div>
 );
 
-const DepositTimeline = ({ userDeposit }: { userDeposit: UserDeposit }) => (
-  <div className="grid gap-6 md:grid-cols-2">
-    <div className="space-y-4">
-      <div>
-        <div className="mb-1 flex items-center gap-2">
-          <Icon name="Clock" size={14} className="text-primary-apollo" />
-          <span className="text-sm font-medium text-shade-secondary">
-            Deposit Date
-          </span>
-        </div>
-        <p className="text-base font-medium text-shade-primary">
-          {new Date(userDeposit.depositSlot * 1000).toLocaleDateString(
-            undefined,
-            {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            }
-          )}
-        </p>
-      </div>
+const DepositTimeline = ({ userDeposit }: { userDeposit: UserDeposit }) => {
+  const zplClient = useZplClient();
+  const [timeUntilUnlock, setTimeUntilUnlock] = useState<string>("Loading...");
+  const [progress, setProgress] = useState<number>(0);
+  const [depositTime, setDepositTime] = useState<number>(0);
+  const [unlockTime, setUnlockTime] = useState<number>(0);
 
-      <div>
-        <div className="mb-1 flex items-center gap-2">
-          <Icon name="Clock" size={14} className="text-primary-apollo" />
-          <span className="text-sm font-medium text-shade-secondary">
-            Unlock Date
-          </span>
-        </div>
-        <p className="text-base font-medium text-shade-primary">
-          {new Date(userDeposit.unlockSlot * 1000).toLocaleDateString(
-            undefined,
-            {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            }
-          )}
-        </p>
-      </div>
-    </div>
+  useEffect(() => {
+    const updateTimeAndProgress = async () => {
+      if (!zplClient) return;
 
-    <div className="space-y-4">
-      <div>
-        <div className="mb-1 flex items-center gap-2">
-          <Icon name="Withdraw02" size={14} className="text-primary-apollo" />
-          <span className="text-sm font-medium text-shade-secondary">
-            Commission Rate
-          </span>
-        </div>
-        <p className="text-base font-medium text-shade-primary">
-          {(userDeposit.commissionRate / 10000).toFixed(2)}%
-        </p>
-      </div>
+      const newUserDepositTime = await zplClient.getBlockTime(
+        userDeposit.depositSlot
+      );
+      if (newUserDepositTime) {
+        setDepositTime(newUserDepositTime);
+      }
 
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      const currentSlot = await zplClient.getCurrentSlot();
+      setUnlockTime(Date.now() / 1000 + (userDeposit.unlockSlot - currentSlot));
+
+      setTimeUntilUnlock(
+        `${Math.max(0, Math.floor((unlockTime * 1000 - Date.now()) / (1000 * 60 * 60 * 24))).toFixed(0)} days`
+      );
+
+      setProgress(
+        Math.min(
+          100,
+          ((Date.now() - depositTime * 1000) /
+            (unlockTime * 1000 - depositTime * 1000)) *
+            100
+        )
+      );
+    };
+
+    updateTimeAndProgress();
+
+    // Update every minute
+    const intervalId = setInterval(updateTimeAndProgress, 60000);
+    return () => clearInterval(intervalId);
+  }, [userDeposit, zplClient]);
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-6">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
             <Icon name="Clock" size={14} className="text-primary-apollo" />
             <span className="text-sm font-medium text-shade-secondary">
-              Time until unlock
+              Deposit Date
             </span>
           </div>
-          <span className="text-sm font-medium text-primary-apollo">
-            {getRemainingTime(userDeposit.unlockSlot, userDeposit.depositSlot)}
-          </span>
+          <p className="text-base font-medium text-shade-primary">
+            {new Date(depositTime * 1000).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
         </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="h-full rounded-full bg-primary-apollo transition-all duration-1000"
-            style={{
-              width: `${Math.min(
-                100,
-                ((Date.now() / 1000 - userDeposit.depositSlot) /
-                  (userDeposit.unlockSlot - userDeposit.depositSlot)) *
-                  100
-              )}%`,
-            }}
-          ></div>
+
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Icon name="Clock" size={14} className="text-primary-apollo" />
+            <span className="text-sm font-medium text-shade-secondary">
+              Unlock Date
+            </span>
+          </div>
+          <p className="text-base font-medium text-shade-primary">
+            {new Date(unlockTime * 1000).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Icon name="Withdraw02" size={14} className="text-primary-apollo" />
+            <span className="text-sm font-medium text-shade-secondary">
+              Commission Rate
+            </span>
+          </div>
+          <p className="text-base font-medium text-shade-primary">
+            {userDeposit.commissionRate}%
+          </p>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon name="Clock" size={14} className="text-primary-apollo" />
+              <span className="text-sm font-medium text-shade-secondary">
+                Time until unlock
+              </span>
+            </div>
+            <span className="text-sm font-medium text-primary-apollo">
+              {timeUntilUnlock}
+            </span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-primary-apollo transition-all duration-1000"
+              style={{
+                width: `${progress}%`,
+              }}
+            ></div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const WithdrawDepositedState = ({
   userDeposit,
@@ -261,10 +288,21 @@ const WithdrawDepositedState = ({
   isProcessing: boolean;
   handleRequestWithdrawal: () => Promise<void>;
 }) => {
-  const beforeUnlock = isBeforeUnlock(
-    userDeposit.unlockSlot,
-    userDeposit.depositSlot
-  );
+  const zplClient = useZplClient();
+  const [beforeUnlock, setBeforeUnlock] = useState(true);
+
+  useEffect(() => {
+    if (!zplClient) return;
+
+    const checkUnlock = async () => {
+      const result = await isBeforeUnlock(userDeposit.unlockSlot, () =>
+        zplClient.getCurrentSlot()
+      );
+      setBeforeUnlock(result);
+    };
+
+    checkUnlock();
+  }, [userDeposit, zplClient]);
 
   return (
     <>
@@ -627,20 +665,31 @@ export default function DashboardPage() {
   const { connected: solanaWalletConnected } = useWallet();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showWithdrawalInfo, setShowWithdrawalInfo] = useState(false);
+  const zplClient = useZplClient();
 
   useEffect(() => {
     mutateUserDeposit();
   }, [solanaWalletConnected, mutateUserDeposit]);
 
   useEffect(() => {
-    if (
-      userDeposit &&
-      userDeposit.state === UserDepositState.Deposited &&
-      isBeforeUnlock(userDeposit.unlockSlot, userDeposit.depositSlot)
-    ) {
-      setShowWithdrawalInfo(true);
-    }
-  }, [userDeposit]);
+    const checkUnlock = async () => {
+      if (!userDeposit || !zplClient) return;
+
+      try {
+        const beforeUnlock = await isBeforeUnlock(userDeposit.unlockSlot, () =>
+          zplClient.getCurrentSlot()
+        );
+
+        if (userDeposit.state === UserDepositState.Deposited && !beforeUnlock) {
+          setShowWithdrawalInfo(true);
+        }
+      } catch (error) {
+        console.error("Error checking unlock status:", error);
+      }
+    };
+
+    checkUnlock();
+  }, [userDeposit, zplClient]);
 
   const handleRequestWithdrawal = async () => {
     try {
