@@ -41,14 +41,23 @@ function calculateOptimalAPY(usdAmount: number) {
   }
 }
 
-// Calculate minimum risk buffer for full principal protection
-function calculateMinRiskBuffer(currentAPY: number) {
-  const worstCaseAPY = 0.03; // 3%
-  const fixedCommission = 0.2; // 20%
-  return Math.max(
-    0,
-    Math.min(1, 1 - worstCaseAPY / (currentAPY * (1 - fixedCommission)))
-  );
+// Minimum risk-buffer (0-1) so that the conservative APY (after commission)
+// equals the 3 % worst-case APY.  This guarantees the displayed "Target APY"
+// falls back to exactly 3 % when the slider is at its maximum.
+function calculateMinRiskBuffer(
+  currentAPY: number,
+  {
+    worstCaseAPY = 0.03, // 3% (gross)
+    commissionRate = 0.2, // 20%
+  }: {
+    worstCaseAPY?: number;
+    commissionRate?: number;
+  } = {}
+) {
+  const effectiveCurrent = currentAPY * (1 - commissionRate);
+  if (effectiveCurrent <= 0) return 1;
+  const buffer = 1 - worstCaseAPY / effectiveCurrent;
+  return Math.max(0, Math.min(1, buffer));
 }
 
 export default function DepositPage() {
@@ -75,11 +84,11 @@ export default function DepositPage() {
   const onClickDeposit = () => {
     // Default commission rate is 20% (20)
     const commissionRate = 20;
-    console.log(riskBuffer, commissionRate + riskBuffer);
+    console.log(riskBuffer, commissionRate * (1 + riskBuffer / 100));
     astrape.deposit(
       depositAmount,
       slotCountMap[depositPeriod],
-      commissionRate + riskBuffer
+      commissionRate * (1 + riskBuffer / 100)
     );
   };
 
@@ -101,14 +110,14 @@ export default function DepositPage() {
   }, [currentAPY, riskBuffer]);
 
   const receiveAmount = useMemo(() => {
-    const periodMonths = slotCountMap[depositPeriod];
-    const periodRate = conservativeAPY * (periodMonths / 12);
+    const periodRate =
+      conservativeAPY * (Number(depositPeriod.replace("M", "")) / 12);
     const discountFactor = 1 / (1 + periodRate);
     return usdAmount * periodRate * discountFactor;
   }, [usdAmount, conservativeAPY, depositPeriod]);
 
   const scenarioAnalysis = useMemo(() => {
-    const periodMonths = slotCountMap[depositPeriod];
+    const periodMonths = Number(depositPeriod.replace("M", ""));
     const commissionRate = 0.2;
 
     const scenarios = [
@@ -295,8 +304,8 @@ function AmountAndPeriodStep({
           You will deposit for
         </span>
         <div className="text-center text-xl font-bold text-shade-primary">
-          {slotCountMap[depositPeriod]}{" "}
-          {slotCountMap[depositPeriod] === 1 ? "month" : "months"}
+          {Number(depositPeriod.replace("M", ""))}{" "}
+          {Number(depositPeriod.replace("M", "")) === 1 ? "month" : "months"}
         </div>
       </div>
 
@@ -379,9 +388,9 @@ function RiskBufferStep({
             {(worstCase?.protection || 0).toFixed(1)}%
           </span>
         </div>
-        {riskBuffer >= maxRiskBuffer && (
+        {riskBuffer >= maxRiskBuffer - 0.1 && (
           <div className="mt-2 rounded-lg bg-green-50 p-2 text-center font-semibold text-green-600">
-            ✓ Principal 100% protected even in worst case (3% APY)
+            ✓ Principal 99.9% protected even in worst case (3% APY)
           </div>
         )}
       </div>
