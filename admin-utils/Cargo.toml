@@ -1,5 +1,5 @@
 [package]
-name = "breakout-initializer"
+name = "astrape-admin-utils"
 version = "0.1.0"
 edition = "2021"
 
@@ -16,5 +16,14 @@ anyhow = "1.0.69"
 clap = { version = "4.1.8", features = ["derive"] }
 
 [[bin]]
-name = "breakout-initializer"
-path = "src/main.rs" 
+name = "initialize"
+path = "src/initialize.rs" 
+
+[[bin]]
+name = "update-config"
+path = "src/update_config.rs"
+
+[[bin]]
+name = "admin-deposit-interest"
+path = "src/admin_deposit_interest.rs"
+
