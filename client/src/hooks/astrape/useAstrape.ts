@@ -128,10 +128,19 @@ export function useAstrape() {
       // Add the deposit instruction
       instructions.push(depositInstruction);
 
-      // Send all the instructions in a single transaction
-      return zplClient.signAndSendTransactionWithInstructions(instructions);
+      try {
+        // Send all the instructions in a single transaction and return the signature
+        const signature =
+          await zplClient.signAndSendTransactionWithInstructions(instructions);
+        // After successful deposit, refresh user deposit data
+        mutateUserDeposit();
+        return signature;
+      } catch (error) {
+        console.error("Error in deposit transaction:", error);
+        throw error;
+      }
     },
-    [zplClient]
+    [zplClient, mutateUserDeposit]
   );
 
   const requestWithdrawal = useCallback(async () => {

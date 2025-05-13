@@ -14,6 +14,7 @@ import {
   ComposedChart,
   ResponsiveContainer,
 } from "recharts";
+import DepositSuccessModal from "./modal";
 
 type DepositPeriod = "1M" | "3M" | "6M";
 
@@ -67,6 +68,13 @@ export default function DepositPage() {
   const [depositAmount, setDepositAmount] = useState(1);
   const [depositPeriod, setDepositPeriod] = useState<DepositPeriod>("3M");
   const [riskBuffer, setRiskBuffer] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [transactionData, setTransactionData] = useState<{
+    depositAmount: number;
+    depositPeriod: string;
+    receiveAmount: number;
+    transactionSignature?: string;
+  }>();
 
   const astrape = useAstrape();
 
@@ -81,15 +89,27 @@ export default function DepositPage() {
     setRiskBuffer(newRate);
   };
 
-  const onClickDeposit = () => {
+  const onClickDeposit = async () => {
     // Default commission rate is 20% (20)
     const commissionRate = 20;
-    console.log(riskBuffer, commissionRate * (1 + riskBuffer / 100));
-    astrape.deposit(
-      depositAmount,
-      slotCountMap[depositPeriod],
-      commissionRate * (1 + riskBuffer / 100)
-    );
+    try {
+      const signature = await astrape.deposit(
+        depositAmount,
+        slotCountMap[depositPeriod],
+        commissionRate * (1 + riskBuffer / 100)
+      );
+
+      setTransactionData({
+        depositAmount,
+        depositPeriod,
+        receiveAmount,
+        transactionSignature: signature,
+      });
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error("Deposit failed:", error);
+      // You might want to add error handling here
+    }
   };
 
   const usdAmount = useMemo(() => {
@@ -212,6 +232,12 @@ export default function DepositPage() {
           </div>
         </div>
       </div>
+
+      <DepositSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        transactionData={transactionData}
+      />
     </main>
   );
 }
