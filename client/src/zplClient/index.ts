@@ -306,4 +306,20 @@ export class ZplClient {
       true
     );
   }
+
+  // Added methods for Astrape token accounts
+
+  async getCollateralMint(): Promise<PublicKey> {
+    const astrapeConfig = await this.getAstrapeConfig();
+    return astrapeConfig.collateralMint;
+  }
+
+  async getInterestMint(): Promise<PublicKey> {
+    const astrapeConfig = await this.getAstrapeConfig();
+    return astrapeConfig.interestMint;
+  }
+
+  async accountExists(pubkey: PublicKey): Promise<boolean> {
+    return this.rpcClient.checkAccountExists(pubkey);
+  }
 }

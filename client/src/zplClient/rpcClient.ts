@@ -93,7 +93,6 @@ export class RpcClient {
 
   async getAstrapeConfig() {
     const [configPDA] = deriveConfigPDA();
-    console.log("configPDA", configPDA.toBase58());
 
     try {
       const astrapeAccount = await this.connection.getAccountInfo(configPDA);
@@ -102,8 +101,18 @@ export class RpcClient {
         throw new Error("Failed to fetch Astrape account data");
 
       const astrapeConfig = deserializeAstrapeConfig(astrapeAccount.data);
-      console.log("astrapeConfig", astrapeConfig);
-      return astrapeConfig;
+
+      return {
+        interestMint: astrapeConfig.interestMint,
+        collateralMint: astrapeConfig.collateralMint,
+        baseInterestRate: astrapeConfig.baseInterestRate / 10, // Convert from basis points to percentage
+        priceFactor: astrapeConfig.priceFactor * Math.pow(10, 8 - 6), // Adjust for decimal difference
+        minCommissionRate: astrapeConfig.minCommissionRate / 10, // Convert from basis points to percentage
+        maxCommissionRate: astrapeConfig.maxCommissionRate / 10, // Convert from basis points to percentage
+        minDepositAmount: astrapeConfig.minDepositAmount / 10_000_000, // Convert to zBTC
+        maxDepositAmount: astrapeConfig.maxDepositAmount / 10_000_000, // Convert to zBTC
+        depositPeriods: astrapeConfig.depositPeriods,
+      };
     } catch {
       // Fallback for testing/development
       return {
@@ -142,6 +151,16 @@ export class RpcClient {
         state: UserDepositState.Deposited,
         commissionRate: 20,
       };
+    }
+  }
+
+  async checkAccountExists(pubkey: PublicKey): Promise<boolean> {
+    try {
+      const accountInfo = await this.connection.getAccountInfo(pubkey);
+      return accountInfo !== null;
+    } catch (error) {
+      console.error("Error checking if account exists:", error);
+      return false;
     }
   }
 }

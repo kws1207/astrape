@@ -9,6 +9,10 @@ import {
   deriveConfigPDA,
   deriveUserDepositPDA,
 } from "@/utils/pda";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+} from "@solana/spl-token";
 
 export function useAstrape() {
   const zplClient = useZplClient();
@@ -51,6 +55,7 @@ export function useAstrape() {
       const [authorityPDA] = deriveAuthorityPDA();
       const [userDepositPDA] = deriveUserDepositPDA(walletPublicKey);
 
+      // Get account addresses
       const userCollateralAccount = await zplClient.getUserCollateralAccount();
       const poolCollateralAccount = await zplClient.getPoolCollateralAccount();
       const userInterestAccount = await zplClient.getUserInterestAccount();
@@ -59,6 +64,41 @@ export function useAstrape() {
       const tokenProgram = new PublicKey(
         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
       );
+
+      // Instructions array to hold all required instructions
+      const instructions = [];
+
+      // Check if token accounts exist and create them if necessary
+      const collateralMint = await zplClient.getCollateralMint();
+      const interestMint = await zplClient.getInterestMint();
+
+      // Check if user collateral account exists, if not create it
+      if (!(await zplClient.accountExists(userCollateralAccount))) {
+        instructions.push(
+          createAssociatedTokenAccountInstruction(
+            walletPublicKey,
+            userCollateralAccount,
+            walletPublicKey,
+            collateralMint,
+            tokenProgram,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
+
+      // Check if user interest account exists, if not create it
+      if (!(await zplClient.accountExists(userInterestAccount))) {
+        instructions.push(
+          createAssociatedTokenAccountInstruction(
+            walletPublicKey,
+            userInterestAccount,
+            walletPublicKey,
+            interestMint,
+            tokenProgram,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
 
       // Create instruction data with all required fields
       const instructionData = TokenLockInstruction.DepositCollateral({
@@ -85,9 +125,11 @@ export function useAstrape() {
         data: instructionData,
       });
 
-      return zplClient.signAndSendTransactionWithInstructions([
-        depositInstruction,
-      ]);
+      // Add the deposit instruction
+      instructions.push(depositInstruction);
+
+      // Send all the instructions in a single transaction
+      return zplClient.signAndSendTransactionWithInstructions(instructions);
     },
     [zplClient]
   );
