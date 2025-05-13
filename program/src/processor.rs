@@ -204,7 +204,7 @@ impl Processor {
         let ratio_without_commission = (1000.0 - commission_rate as f64) / 1000.0;
 
         let interest = collateral_value_in_interest as f64
-            * (1.0 + base_interest_rate)
+            * base_interest_rate
             * deposit_period_in_years
             * ratio_without_commission;
 
