@@ -26,6 +26,7 @@ spl-associated-token-account = { version = "1.1.2", features = ["no-entrypoint"]
 thiserror = "1"
 
 [dev-dependencies]
+clap = { version = "4.1.8", features = ["derive", "env"] }
 env_logger = "0.11.5"
 log = "0.4.20"
 solana-program-test = "1.17.0"

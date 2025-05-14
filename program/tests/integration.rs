@@ -7,6 +7,7 @@ use {
         state::{AstrapeConfig, UserDeposit, UserDepositState},
     },
     borsh::{BorshDeserialize, BorshSerialize},
+    clap::Parser,
     solana_program::{
         instruction::{AccountMeta, Instruction},
         program_pack::Pack,
@@ -18,6 +19,7 @@ use {
     solana_sdk::{
         account::Account,
         signature::{Keypair, Signer},
+        signer::EncodableKey,
         sysvar::SysvarId,
         transaction::Transaction,
     },
@@ -754,6 +756,13 @@ impl TestSetup {
         banks_client.process_transaction(transaction).await.unwrap();
     }
 }
+
+#[derive(Debug, clap::Parser)]
+struct TestArgs {
+    #[clap(short, long, env = "ADMIN_KEYPAIR")]
+    keypair: String,
+}
+
 #[tokio::test]
 async fn test_full_flow() {
     env_logger::try_init();
@@ -772,13 +781,8 @@ async fn test_full_flow() {
         processor!(astrape::entrypoint::process_instruction),
     );
 
-    let admin = Keypair::from_bytes(&[
-        97, 207, 117, 213, 126, 4, 83, 204, 14, 192, 150, 163, 42, 207, 232, 166, 98, 53, 10, 124,
-        164, 132, 86, 113, 81, 3, 81, 125, 39, 72, 68, 202, 204, 13, 199, 8, 228, 122, 171, 83,
-        131, 50, 27, 157, 206, 153, 164, 34, 8, 61, 202, 12, 178, 68, 104, 155, 158, 142, 181, 94,
-        56, 2, 237, 86,
-    ])
-    .unwrap();
+    let args = TestArgs::parse();
+    let admin = Keypair::read_from_file(&args.keypair).unwrap();
 
     // Add account with some lamports to program_test to work with
     program_test.add_account(
@@ -1320,13 +1324,8 @@ async fn test_negative_cases() {
         processor!(astrape::entrypoint::process_instruction),
     );
 
-    let admin = Keypair::from_bytes(&[
-        97, 207, 117, 213, 126, 4, 83, 204, 14, 192, 150, 163, 42, 207, 232, 166, 98, 53, 10, 124,
-        164, 132, 86, 113, 81, 3, 81, 125, 39, 72, 68, 202, 204, 13, 199, 8, 228, 122, 171, 83,
-        131, 50, 27, 157, 206, 153, 164, 34, 8, 61, 202, 12, 178, 68, 104, 155, 158, 142, 181, 94,
-        56, 2, 237, 86,
-    ])
-    .unwrap();
+    let args = TestArgs::parse();
+    let admin = Keypair::read_from_file(&args.keypair).unwrap();
 
     // Add account with some lamports to program_test to work with
     program_test.add_account(
