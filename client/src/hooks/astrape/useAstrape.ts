@@ -16,7 +16,7 @@ import {
 
 export function useAstrape() {
   const zplClient = useZplClient();
-  const { data: config } = useSWR(
+  const { data: config, isLoading: isConfigLoading } = useSWR(
     zplClient ? "astrapeConfig" : null,
     async () => {
       const config = await zplClient?.getAstrapeConfig();
@@ -271,5 +271,6 @@ export function useAstrape() {
     withdrawCollateral,
     userDeposit,
     mutateUserDeposit,
+    isConfigLoading,
   };
 }

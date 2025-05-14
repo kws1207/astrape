@@ -268,6 +268,9 @@ export class ZplClient {
     }
 
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     return getAssociatedTokenAddressSync(
       astrapeConfig.collateralMint,
       this.walletPublicKey
@@ -276,6 +279,9 @@ export class ZplClient {
 
   async getPoolCollateralAccount(): Promise<PublicKey> {
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     const [authorityPDA] = deriveAuthorityPDA();
     // authorityPDA is off-curve → allowOwnerOffCurve = true
     return getAssociatedTokenAddressSync(
@@ -291,6 +297,9 @@ export class ZplClient {
     }
 
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     return getAssociatedTokenAddressSync(
       astrapeConfig.interestMint,
       this.walletPublicKey
@@ -299,6 +308,9 @@ export class ZplClient {
 
   async getPoolInterestAccount(): Promise<PublicKey> {
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     const [authorityPDA] = deriveAuthorityPDA();
     return getAssociatedTokenAddressSync(
       astrapeConfig.interestMint,
@@ -311,11 +323,17 @@ export class ZplClient {
 
   async getCollateralMint(): Promise<PublicKey> {
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     return astrapeConfig.collateralMint;
   }
 
   async getInterestMint(): Promise<PublicKey> {
     const astrapeConfig = await this.getAstrapeConfig();
+    if (!astrapeConfig) {
+      throw new Error("Astrape config not found");
+    }
     return astrapeConfig.interestMint;
   }
 

@@ -77,6 +77,7 @@ export default function DepositPage() {
   }>();
 
   const astrape = useAstrape();
+  const { isConfigLoading } = astrape;
 
   const onChangeDepositAmount = (
     event: React.ChangeEvent<HTMLInputElement>
@@ -117,8 +118,14 @@ export default function DepositPage() {
   }, [depositAmount, astrape.config?.priceFactor]);
 
   const currentAPY = useMemo(() => {
+    if (astrape.config?.baseInterestRate !== undefined) {
+      // Convert baseInterestRate (percentage value) to decimal
+      return astrape.config.baseInterestRate / 100;
+    }
+
+    // Fallback to tier-based calculation if config not yet loaded
     return calculateOptimalAPY(usdAmount);
-  }, [usdAmount]);
+  }, [usdAmount, astrape.config?.baseInterestRate]);
 
   const minRiskBuffer = useMemo(() => {
     return calculateMinRiskBuffer(currentAPY);
@@ -130,10 +137,21 @@ export default function DepositPage() {
   }, [currentAPY, riskBuffer]);
 
   const receiveAmount = useMemo(() => {
-    const periodRate =
-      conservativeAPY * (Number(depositPeriod.replace("M", "")) / 12);
-    const discountFactor = 1 / (1 + periodRate);
-    return usdAmount * periodRate * discountFactor;
+    // Calculate the period rate from the conservativeAPY (which already has commission deducted)
+    const periodMonths = Number(depositPeriod.replace("M", ""));
+
+    // Calculate gross period rate (before commission) for discount factor
+    const commissionRate = 0.2;
+    const grossAPY = conservativeAPY / (1 - commissionRate);
+    const grossPeriodRate = grossAPY * (periodMonths / 12);
+
+    // Use gross period rate for discount factor
+    const discountFactor = 1 / (1 + grossPeriodRate);
+
+    // Use net period rate (conservativeAPY) for calculating the interest amount
+    const netPeriodRate = conservativeAPY * (periodMonths / 12);
+
+    return usdAmount * netPeriodRate * discountFactor;
   }, [usdAmount, conservativeAPY, depositPeriod]);
 
   const scenarioAnalysis = useMemo(() => {
@@ -165,6 +183,19 @@ export default function DepositPage() {
       };
     });
   }, [usdAmount, depositPeriod, receiveAmount, currentAPY]);
+
+  if (isConfigLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary-apollo border-t-transparent"></div>
+          <p className="text-lg font-medium text-shade-primary">
+            Loading configuration...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="w-full overflow-hidden">

@@ -12,7 +12,6 @@ import {
   deserializeAstrapeConfig,
   deserializeUserDeposit,
 } from "@/schemas/astrape";
-import { UserDepositState } from "@/types/astrape";
 import { deriveConfigPDA, deriveUserDepositPDA } from "@/utils/pda";
 
 export class RpcClient {
@@ -115,17 +114,7 @@ export class RpcClient {
       };
     } catch {
       // Fallback for testing/development
-      return {
-        interestMint: new PublicKey("11111111111111111111111111111111"),
-        collateralMint: new PublicKey("11111111111111111111111111111111"),
-        baseInterestRate: 0,
-        priceFactor: 0,
-        minCommissionRate: 0,
-        maxCommissionRate: 0,
-        minDepositAmount: 0,
-        maxDepositAmount: 0,
-        depositPeriods: [0],
-      };
+      return;
     }
   }
 
@@ -143,14 +132,7 @@ export class RpcClient {
       return userDepositData;
     } catch {
       // Fallback for testing/development
-      return {
-        amount: 1,
-        depositSlot: 366_202_735,
-        unlockSlot: 382_702_735,
-        interestReceived: 4048,
-        state: UserDepositState.Deposited,
-        commissionRate: 20,
-      };
+      return;
     }
   }
 

@@ -1,13 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useAstrape } from "@/hooks/astrape/useAstrape";
 import Button from "@/components/Button/Button";
 import Icon from "@/components/Icons";
-import { IconName } from "@/components/Icons/icons";
 
 export default function Home() {
   const router = useRouter();
+  const astrape = useAstrape();
+  const { isConfigLoading, config } = astrape;
   const [amount, setAmount] = useState(100000); // 초기 금액: $100,000
   const [period, setPeriod] = useState(3); // 초기 기간: 3개월
   const [interestAmount, setInterestAmount] = useState(0);
@@ -16,45 +18,32 @@ export default function Home() {
     router.push("/mint");
   };
 
-  // 선이자 계산 함수
-  const calculateOptimalApy = (amountUsd: number): number => {
-    if (amountUsd <= 1000000) {
-      return 0.2132; // 21.32% for amounts up to 1M
-    } else if (amountUsd <= 10000000) {
-      const wAmount = Math.min(amountUsd, 10000000);
-      const fAmount = Math.max(amountUsd - 10000000, 0);
-      return (wAmount * 0.2132 + fAmount * 0.1432) / amountUsd;
-    } else {
-      return (10000000 * 0.2132 + (amountUsd - 10000000) * 0.1432) / amountUsd;
-    }
-  };
+  const calculateAdvanceInterest = useCallback(
+    (amountUsd: number, periodMonths: number): number => {
+      // Step 1: 최적 APY 결정
+      const optimalApy = (config?.baseInterestRate ?? 0) / 100;
+      // Step 2: 기간별 수익 계산
+      const periodReturnRate = optimalApy * (periodMonths / 12);
+      const grossReturn = amountUsd * periodReturnRate;
 
-  const calculateAdvanceInterest = (
-    amountUsd: number,
-    periodMonths: number
-  ): number => {
-    // Step 1: 최적 APY 결정
-    const optimalApy = calculateOptimalApy(amountUsd);
+      // Step 3: 수수료 차감 (20%)
+      const netReturn = grossReturn * 0.8;
 
-    // Step 2: 기간별 수익 계산
-    const periodReturnRate = optimalApy * (periodMonths / 12);
-    const grossReturn = amountUsd * periodReturnRate;
+      // Step 4: 선이자 할인 적용
+      const discountFactor = 1 / (1 + periodReturnRate);
+      const advanceInterest = netReturn * discountFactor;
 
-    // Step 3: 수수료 차감 (20%)
-    const netReturn = grossReturn * 0.8;
-
-    // Step 4: 선이자 할인 적용
-    const discountFactor = 1 / (1 + periodReturnRate);
-    const advanceInterest = netReturn * discountFactor;
-
-    return advanceInterest;
-  };
+      return advanceInterest;
+    },
+    [config?.baseInterestRate]
+  );
 
   // 입력값 변경 시 이자 다시 계산
   useEffect(() => {
     const interest = calculateAdvanceInterest(amount, period);
     setInterestAmount(Math.round(interest));
-  }, [amount, period]);
+    // Re-run when the Astrape config is fetched/updated
+  }, [amount, period, config?.baseInterestRate, calculateAdvanceInterest]);
 
   // 금액 포맷팅 함수
   const formatCurrency = (value: number): string => {
@@ -64,6 +53,20 @@ export default function Home() {
       maximumFractionDigits: 0,
     }).format(value);
   };
+
+  // Show loading indicator until configuration is fetched
+  if (isConfigLoading || !config) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary-apollo border-t-transparent"></div>
+          <p className="text-lg font-medium text-shade-primary">
+            Loading configuration...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="w-full">
@@ -152,7 +155,7 @@ export default function Home() {
               <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-5">
                 <div className="mb-4 text-center">
                   <span className="mb-1 block text-shade-secondary">
-                    You'll Receive Instantly
+                    You&apos;ll Receive Instantly
                   </span>
                   <span className="text-3xl font-bold text-primary-apollo">
                     {formatCurrency(interestAmount)}
@@ -357,7 +360,7 @@ export default function Home() {
             Deposit BTC and Earn Interest Now
           </h2>
           <p className="mx-auto mb-10 max-w-3xl text-lg text-shade-secondary">
-            Don't wait any longer. Deposit now and claim your interest
+            Don&apos;t wait any longer. Deposit now and claim your interest
             immediately.
           </p>
           <div className="flex justify-center">
@@ -371,35 +374,5 @@ export default function Home() {
         </div>
       </section>
     </main>
-  );
-}
-
-// 단계 카드 컴포넌트 타입 정의
-interface StepCardProps {
-  number: number;
-  title: string;
-  description: string;
-  iconName: IconName;
-}
-
-// 단계 카드 컴포넌트
-function StepCard({ number, title, description, iconName }: StepCardProps) {
-  return (
-    <div className="rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-sm transition-shadow duration-300 hover:shadow-md">
-      <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-apollo font-bold text-white">
-          {number}
-        </div>
-        <div className="flex-1">
-          <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-xl font-semibold text-shade-primary">
-              {title}
-            </h3>
-            <Icon name={iconName} size={18} className="text-primary-apollo" />
-          </div>
-          <p className="text-shade-secondary">{description}</p>
-        </div>
-      </div>
-    </div>
   );
 }
