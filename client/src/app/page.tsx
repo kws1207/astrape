@@ -10,8 +10,8 @@ export default function Home() {
   const router = useRouter();
   const astrape = useAstrape();
   const { isConfigLoading, config } = astrape;
-  const [amount, setAmount] = useState(100000); // 초기 금액: $100,000
-  const [period, setPeriod] = useState(3); // 초기 기간: 3개월
+  const [amount, setAmount] = useState(100000);
+  const [period, setPeriod] = useState(3);
   const [interestAmount, setInterestAmount] = useState(0);
 
   const handleGetStarted = () => {
@@ -20,16 +20,12 @@ export default function Home() {
 
   const calculateAdvanceInterest = useCallback(
     (amountUsd: number, periodMonths: number): number => {
-      // Step 1: 최적 APY 결정
       const optimalApy = (config?.baseInterestRate ?? 0) / 100;
-      // Step 2: 기간별 수익 계산
       const periodReturnRate = optimalApy * (periodMonths / 12);
       const grossReturn = amountUsd * periodReturnRate;
 
-      // Step 3: 수수료 차감 (20%)
       const netReturn = grossReturn * 0.8;
 
-      // Step 4: 선이자 할인 적용
       const discountFactor = 1 / (1 + periodReturnRate);
       const advanceInterest = netReturn * discountFactor;
 
@@ -38,14 +34,11 @@ export default function Home() {
     [config?.baseInterestRate]
   );
 
-  // 입력값 변경 시 이자 다시 계산
   useEffect(() => {
     const interest = calculateAdvanceInterest(amount, period);
     setInterestAmount(Math.round(interest));
-    // Re-run when the Astrape config is fetched/updated
   }, [amount, period, config?.baseInterestRate, calculateAdvanceInterest]);
 
-  // 금액 포맷팅 함수
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -54,7 +47,6 @@ export default function Home() {
     }).format(value);
   };
 
-  // Show loading indicator until configuration is fetched
   if (isConfigLoading || !config) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -70,17 +62,13 @@ export default function Home() {
 
   return (
     <main className="w-full">
-      {/* 히어로 섹션 */}
       <section className="relative overflow-hidden px-20 py-20">
-        {/* 배경 효과 */}
         <div className="absolute inset-0 bg-gradient-to-b from-primary-apollo/5 to-transparent" />
         <div className="absolute -right-20 top-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
         <div className="absolute -left-20 bottom-20 h-64 w-64 rounded-full bg-primary-apollo/5 blur-3xl md:h-96 md:w-96" />
 
-        {/* 컨텐츠 */}
         <div className="relative z-10 mx-auto max-w-7xl">
           <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
-            {/* 왼쪽: 타이틀과 설명 */}
             <div className="flex flex-col items-start">
               <h1 className="mb-12 text-4xl font-bold text-shade-primary">
                 <span className="text-6xl text-primary-apollo">
@@ -99,12 +87,10 @@ export default function Home() {
               </p>
             </div>
 
-            {/* 오른쪽: 이자 계산기 */}
             <div className="mx-auto w-full max-w-md rounded-2xl border border-primary-apollo/10 bg-white p-6 shadow-lg md:ml-auto md:mr-0">
               <h2 className="mb-6 text-center text-2xl font-bold text-shade-primary">
                 Interest Calculator
               </h2>
-              {/* 금액 선택 */}
               <div className="mb-6">
                 <div className="mb-2 flex items-center justify-between">
                   <label className="font-medium text-shade-primary">
@@ -129,7 +115,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 기간 선택 */}
               <div className="mb-6">
                 <label className="mb-2 block font-medium text-shade-primary">
                   Deposit Period
@@ -151,7 +136,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 이자 결과 */}
               <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-5">
                 <div className="mb-4 text-center">
                   <span className="mb-1 block text-shade-secondary">
@@ -178,7 +162,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 사용 방법 */}
       <section className="px-4 py-16">
         <div className="mx-auto max-w-7xl">
           <h2 className="mb-6 text-center text-3xl font-bold text-shade-primary">
@@ -261,7 +244,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Dashboard 및 이자 정보 */}
           <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
             <div>
               <h3 className="mb-6 text-2xl font-bold text-shade-primary">
@@ -353,7 +335,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA 섹션 */}
       <section className="mx-4 my-12 rounded-3xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/20 px-4 py-20 md:mx-8">
         <div className="mx-auto max-w-5xl text-center">
           <h2 className="mb-6 text-3xl font-bold text-shade-primary md:text-4xl">

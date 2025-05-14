@@ -8,11 +8,11 @@
  */
 export function calculateOptimalAPY(usdAmount: number): number {
   if (usdAmount <= 10_000_000) {
-    return 0.2132; // 21.32 %
+    return 0.2132;
   }
 
-  const wfragAmount = 10_000_000; // Amount in the "whale fragment" tier
-  const fragAmount = usdAmount - wfragAmount; // Amount in the "fragment" tier
+  const wfragAmount = 10_000_000;
+  const fragAmount = usdAmount - wfragAmount;
   return (wfragAmount * 0.2132 + fragAmount * 0.1432) / usdAmount;
 }
 
@@ -24,8 +24,8 @@ export function calculateOptimalAPY(usdAmount: number): number {
 export function calculateMinRiskBuffer(
   currentAPY: number,
   {
-    worstCaseAPY = 0.03, // 3 % (gross)
-    commissionRate = 0.2, // 20 %
+    worstCaseAPY = 0.03,
+    commissionRate = 0.2,
   }: {
     worstCaseAPY?: number;
     commissionRate?: number;

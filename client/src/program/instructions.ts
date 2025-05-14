@@ -124,9 +124,6 @@ export class TokenLockInstruction {
   ) {}
 
   private numberToLEBytes(num: number, decimals: number = 0): Uint8Array {
-    // Convert to integer before creating BigInt
-    // Different parameters need different decimal precision
-    // Token amounts typically use 9 decimals, rates may use 0-2 decimals
     const intValue = Math.round(num * Math.pow(10, decimals));
     return new Uint8Array(new BigUint64Array([BigInt(intValue)]).buffer);
   }
@@ -158,7 +155,7 @@ export class TokenLockInstruction {
           deposit_periods: number[];
         };
 
-        buffer.push(0); // Instruction code for Initialize
+        buffer.push(0);
 
         const interestMintBytes = interest_mint.toBytes();
         for (let i = 0; i < interestMintBytes.length; i++) {
@@ -190,7 +187,6 @@ export class TokenLockInstruction {
         for (let i = 0; i < maxDepositBytes.length; i++)
           buffer.push(maxDepositBytes[i]);
 
-        // Encode deposit periods
         for (const period of deposit_periods) {
           const periodBytes = this.numberToLEBytes(period);
           for (let i = 0; i < periodBytes.length; i++)
@@ -219,7 +215,7 @@ export class TokenLockInstruction {
           deposit_periods?: number[];
         };
 
-        buffer.push(1); // Instruction code for AdminUpdateConfig
+        buffer.push(1);
         buffer.push(param);
 
         if (base_interest_rate !== undefined) {
@@ -275,7 +271,6 @@ export class TokenLockInstruction {
 
         if (deposit_periods !== undefined) {
           buffer.push(1);
-          // Encode deposit periods
           for (const period of deposit_periods) {
             const periodBytes = this.numberToLEBytes(period);
             for (let i = 0; i < periodBytes.length; i++)
@@ -288,16 +283,16 @@ export class TokenLockInstruction {
         break;
       }
       case "AdminWithdrawCollateralForInvestment": {
-        buffer.push(2); // Instruction code for AdminWithdrawCollateralForInvestment
+        buffer.push(2);
         break;
       }
       case "AdminPrepareWithdrawal": {
-        buffer.push(3); // Instruction code for AdminPrepareWithdrawal
+        buffer.push(3);
         break;
       }
       case "AdminDepositInterest": {
         const { amount } = this.params as { amount: number };
-        buffer.push(4); // Instruction code for AdminDepositInterest
+        buffer.push(4);
         const amountBytes = this.numberToLEBytes(amount, 6);
         for (let i = 0; i < amountBytes.length; i++)
           buffer.push(amountBytes[i]);
@@ -305,7 +300,7 @@ export class TokenLockInstruction {
       }
       case "AdminWithdrawInterest": {
         const { amount } = this.params as { amount: number };
-        buffer.push(5); // Instruction code for AdminWithdrawInterest
+        buffer.push(5);
         const amountBytes = this.numberToLEBytes(amount, 6);
         for (let i = 0; i < amountBytes.length; i++)
           buffer.push(amountBytes[i]);
@@ -317,7 +312,7 @@ export class TokenLockInstruction {
           deposit_period: number;
           commission_rate: number;
         };
-        buffer.push(6); // Instruction code for DepositCollateral
+        buffer.push(6);
 
         const amountBytes = this.numberToLEBytes(amount, 8);
         for (let i = 0; i < amountBytes.length; i++)
@@ -327,21 +322,21 @@ export class TokenLockInstruction {
         for (let i = 0; i < periodBytes.length; i++)
           buffer.push(periodBytes[i]);
 
-        const commissionBytes = this.numberToLEBytes(commission_rate, 1); // Commission rate in basis points
+        const commissionBytes = this.numberToLEBytes(commission_rate, 1);
         for (let i = 0; i < commissionBytes.length; i++)
           buffer.push(commissionBytes[i]);
         break;
       }
       case "RequestWithdrawalEarly": {
-        buffer.push(7); // Instruction code for RequestWithdrawalEarly
+        buffer.push(7);
         break;
       }
       case "RequestWithdrawal": {
-        buffer.push(8); // Instruction code for RequestWithdrawal
+        buffer.push(8);
         break;
       }
       case "WithdrawCollateral": {
-        buffer.push(9); // Instruction code for WithdrawCollateral
+        buffer.push(9);
         break;
       }
     }

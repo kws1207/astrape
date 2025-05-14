@@ -113,7 +113,6 @@ export class RpcClient {
         depositPeriods: astrapeConfig.depositPeriods,
       };
     } catch {
-      // Fallback for testing/development
       return;
     }
   }
@@ -131,7 +130,6 @@ export class RpcClient {
       const userDepositData = deserializeUserDeposit(deposits.data);
       return userDepositData;
     } catch {
-      // Fallback for testing/development
       return;
     }
   }

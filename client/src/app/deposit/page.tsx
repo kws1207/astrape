@@ -91,7 +91,6 @@ export default function DepositPage() {
   };
 
   const onClickDeposit = async () => {
-    // Default commission rate is 20% (20)
     const commissionRate = 20;
     try {
       const signature = await astrape.deposit(
@@ -109,7 +108,6 @@ export default function DepositPage() {
       setShowSuccessModal(true);
     } catch (error) {
       console.error("Deposit failed:", error);
-      // You might want to add error handling here
     }
   };
 
@@ -119,11 +117,9 @@ export default function DepositPage() {
 
   const currentAPY = useMemo(() => {
     if (astrape.config?.baseInterestRate !== undefined) {
-      // Convert baseInterestRate (percentage value) to decimal
       return astrape.config.baseInterestRate / 100;
     }
 
-    // Fallback to tier-based calculation if config not yet loaded
     return calculateOptimalAPY(usdAmount);
   }, [usdAmount, astrape.config?.baseInterestRate]);
 
@@ -137,18 +133,14 @@ export default function DepositPage() {
   }, [currentAPY, riskBuffer]);
 
   const receiveAmount = useMemo(() => {
-    // Calculate the period rate from the conservativeAPY (which already has commission deducted)
     const periodMonths = Number(depositPeriod.replace("M", ""));
 
-    // Calculate gross period rate (before commission) for discount factor
     const commissionRate = 0.2;
     const grossAPY = conservativeAPY / (1 - commissionRate);
     const grossPeriodRate = grossAPY * (periodMonths / 12);
 
-    // Use gross period rate for discount factor
     const discountFactor = 1 / (1 + grossPeriodRate);
 
-    // Use net period rate (conservativeAPY) for calculating the interest amount
     const netPeriodRate = conservativeAPY * (periodMonths / 12);
 
     return usdAmount * netPeriodRate * discountFactor;
@@ -504,7 +496,6 @@ function RiskBufferStep({
         )}
       </div>
 
-      {/* Scenario Analysis Bar Chart */}
       <div className="mb-6">
         <h3 className="mb-3 text-lg font-semibold text-shade-primary">
           Scenario Analysis
