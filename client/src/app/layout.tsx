@@ -16,10 +16,10 @@ import "./globals.scss";
 import "./design-system.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://orpheus.zeuslayer.dev"),
+  metadataBase: new URL("https://astrape.netlify.app/"),
   title: "Astrape",
   description:
-    "Astrape: A Next.js template for Bitcoin applications built on ZeusLayer (zApps)",
+    "Astrape: Deposit BTC & Claim your Yield Now. Receive your yield upfront. Use Now, Sell Never.",
   openGraph: {
     images: ["/graphics/metadata-img.jpg"],
     title: "Astrape",
