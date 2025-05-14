@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useState } from "react";
 import { useZplClient } from "@/contexts/ZplClientProvider";
-import { slotCountMap } from "../deposit/page";
+import { slotCountMap } from "@/constants/deposit";
 
 const getStateLabel = (state: UserDepositState) => {
   switch (state) {

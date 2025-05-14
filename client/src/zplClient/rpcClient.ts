@@ -11,8 +11,8 @@ import {
 import {
   deserializeAstrapeConfig,
   deserializeUserDeposit,
-  UserDepositState,
-} from "../types/astrape";
+} from "@/schemas/astrape";
+import { UserDepositState } from "@/types/astrape";
 import { deriveConfigPDA, deriveUserDepositPDA } from "@/utils/pda";
 
 export class RpcClient {

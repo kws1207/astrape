@@ -23,6 +23,9 @@ import useSWR from "swr";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import { BTC_DECIMALS } from "@/utils/constant";
 import { formatValue } from "@/utils/format";
+import { DepositPeriod } from "@/types/deposit";
+import { depositPeriodsDisplayText, slotCountMap } from "@/constants/deposit";
+import { calculateOptimalAPY, calculateMinRiskBuffer } from "@/utils/deposit";
 
 // Custom hook to fetch zBTC balance with specific token mint
 const useZbtcBalance = (walletPublicKey: PublicKey | null) => {
@@ -57,51 +60,6 @@ const useZbtcBalance = (walletPublicKey: PublicKey | null) => {
     isLoading,
   };
 };
-
-type DepositPeriod = "1M" | "3M" | "6M";
-
-const depositPeriodsDisplayText: Record<DepositPeriod, string> = {
-  "1M": "1 Month",
-  "3M": "3 Months",
-  "6M": "6 Months",
-};
-
-export const slotCountMap: Record<DepositPeriod, number> = {
-  "1M": 5890909,
-  "3M": 17672727,
-  "6M": 35345454,
-};
-
-// Calculate optimal APY based on amount in USD
-function calculateOptimalAPY(usdAmount: number) {
-  if (usdAmount <= 10000000) {
-    // 10M USD
-    return 0.2132; // 21.32%
-  } else {
-    const wfragAmount = 10000000;
-    const fragAmount = usdAmount - 10000000;
-    return (wfragAmount * 0.2132 + fragAmount * 0.1432) / usdAmount;
-  }
-}
-
-// Minimum risk-buffer (0-1) so that the conservative APY (after commission)
-// equals the 3 % worst-case APY.  This guarantees the displayed "Target APY"
-// falls back to exactly 3 % when the slider is at its maximum.
-function calculateMinRiskBuffer(
-  currentAPY: number,
-  {
-    worstCaseAPY = 0.03, // 3% (gross)
-    commissionRate = 0.2, // 20%
-  }: {
-    worstCaseAPY?: number;
-    commissionRate?: number;
-  } = {}
-) {
-  const effectiveCurrent = currentAPY * (1 - commissionRate);
-  if (effectiveCurrent <= 0) return 1;
-  const buffer = 1 - worstCaseAPY / effectiveCurrent;
-  return Math.max(0, Math.min(1, buffer));
-}
 
 export default function DepositPage() {
   const [step, setStep] = useState<"amount-and-period" | "risk-buffer">(
