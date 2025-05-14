@@ -35,13 +35,18 @@ export default function Header() {
           <div className={styles.header__container__start}>
             <div className={styles.header__container__start__logo}>
               <Link href="/">
-                <Image
-                  src="/branding/logo-primary.svg"
-                  height={22}
-                  width={105}
-                  alt="Apollo Logo Primary"
-                  className="flex"
-                />
+                <div className="flex items-center justify-center">
+                  <Image
+                    src="/branding/logo.png"
+                    height={48}
+                    width={48}
+                    alt="Apollo Logo Primary"
+                    className="flex"
+                  />
+                  <span className="ml-[-8px] text-xl font-bold text-blue-800">
+                    Astrape
+                  </span>
+                </div>
               </Link>
             </div>
             <div className={styles.header__container__start__nav}>
