@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
-use astrape_admin_utils::{COLLATERAL_MINT, INTEREST_MINT, PROGRAM_ID};
-use borsh::BorshSerialize;
-use breakout_contract::{
+use astrape::{
     instructions::TokenLockInstruction,
     processor::{AUTHORITY_SEED, CONFIG_SEED, SLOTS_PER_MONTH, WITHDRAWAL_POOL_SEED},
 };
+use astrape_admin_utils::{COLLATERAL_MINT, INTEREST_MINT, PROGRAM_ID};
+use borsh::BorshSerialize;
 use clap::Parser;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{

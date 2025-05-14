@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-breakout_contract = { path = "../program" }
+astrape = { path = "../program" }
 solana-sdk = "1.17.0"
 solana-client = "1.17.0"
 solana-program = "1.17.0"

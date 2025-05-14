@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
-use astrape_admin_utils::PROGRAM_ID;
-use borsh::BorshSerialize;
-use breakout_contract::{
+use astrape::{
     instructions::TokenLockInstruction,
     processor::{CONFIG_SEED, SLOTS_PER_MONTH},
 };
+use astrape_admin_utils::PROGRAM_ID;
+use borsh::BorshSerialize;
 use clap::Parser;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
@@ -47,21 +47,6 @@ fn main() -> Result<()> {
     let (config_pda, _) = Pubkey::find_program_address(&[CONFIG_SEED], &program_id);
     println!("Config PDA: {}", config_pda);
 
-    let new_config = TokenLockInstruction::AdminUpdateConfig {
-        param: 0,
-        base_interest_rate: Some(170),
-        price_factor: Some(100_000 / 10_u64.pow(8 - 6)),
-        min_commission_rate: Some(200),
-        max_commission_rate: Some(500),
-        min_deposit_amount: Some(10_000_000),
-        max_deposit_amount: Some(1_000_000_000),
-        deposit_periods: Some(vec![
-            1 * SLOTS_PER_MONTH as u64,
-            3 * SLOTS_PER_MONTH as u64,
-            6 * SLOTS_PER_MONTH as u64,
-        ]),
-    };
-
     let instructions = {
         let mut instructions = vec![];
         for i in 0..=6 {
@@ -73,7 +58,7 @@ fn main() -> Result<()> {
                 ],
                 data: TokenLockInstruction::AdminUpdateConfig {
                     param: i,
-                    base_interest_rate: Some(170),
+                    base_interest_rate: Some(213),
                     price_factor: Some(100_000 / 10_u64.pow(8 - 6)),
                     min_commission_rate: Some(200),
                     max_commission_rate: Some(500),

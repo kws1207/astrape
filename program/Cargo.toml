@@ -1,10 +1,10 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "breakout_contract"
+name = "astrape"
 version = "0.1.0"
 edition = "2021"
-description = "Token lock contract for Solana"
+description = "Astrape contract for Solana Breakout Hackathon"
 license = "Apache-2.0"
 
 [lib]
