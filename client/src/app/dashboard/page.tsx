@@ -691,6 +691,7 @@ export default function DashboardPage() {
     userDeposit,
     mutateUserDeposit,
     requestWithdrawal,
+    requestWithdrawalEarly,
     withdrawCollateral,
   } = useAstrape();
   const router = useRouter();
@@ -726,7 +727,11 @@ export default function DashboardPage() {
   const handleRequestWithdrawal = async () => {
     try {
       setIsProcessing(true);
-      await requestWithdrawal();
+      if (userDeposit?.state === UserDepositState.Deposited) {
+        await requestWithdrawalEarly();
+      } else {
+        await requestWithdrawal();
+      }
       mutateUserDeposit();
       setShowWithdrawalInfo(false);
     } catch (error) {
