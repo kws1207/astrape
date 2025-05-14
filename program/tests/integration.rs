@@ -32,12 +32,12 @@ use {
 const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
 // Test helper struct
-struct TestHelper {
-    admin: Keypair,
+struct TestHelper<'a> {
+    admin: &'a Keypair,
     program_id: Pubkey,
-    interest_mint: Keypair,
-    collateral_mint: Keypair,
-    user: Keypair,
+    interest_mint: &'a Keypair,
+    collateral_mint: &'a Keypair,
+    user: &'a Keypair,
     config_pda: Pubkey,
     authority_pda: Pubkey,
     interest_pool_ata: Pubkey,
@@ -50,12 +50,12 @@ struct TestHelper {
     user_deposit_account: Pubkey,
 }
 
-impl TestHelper {
+impl<'a> TestHelper<'a> {
     async fn new(
-        admin: Keypair,
-        user: Keypair,
-        collateral_mint: Keypair,
-        interest_mint: Keypair,
+        admin: &'a Keypair,
+        user: &'a Keypair,
+        collateral_mint: &'a Keypair,
+        interest_mint: &'a Keypair,
     ) -> Self {
         let program_id = astrape::id();
 
@@ -121,10 +121,10 @@ impl TestHelper {
         }
     }
 
-    async fn initialize_program(&self, banks_client: &mut BanksClient) {
-        // Log the authority PDA address
-        self.create_authority_pda(banks_client).await;
-
+    async fn initialize_program(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         // Initialize the program with configuration
         let initialize_instruction = Instruction {
             program_id: self.program_id,
@@ -171,13 +171,14 @@ impl TestHelper {
         );
 
         // Process the transaction and handle the result
-        match banks_client.process_transaction(transaction).await {
-            Ok(_) => log::info!("Transaction processed successfully"),
-            Err(e) => log::info!("Transaction failed: {:?}", e),
-        }
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn admin_deposit_interest(&self, banks_client: &mut BanksClient, amount: u64) {
+    async fn admin_deposit_interest(
+        &self,
+        banks_client: &mut BanksClient,
+        amount: u64,
+    ) -> Result<(), BanksClientError> {
         let deposit_interest_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -204,7 +205,7 @@ impl TestHelper {
             &[&self.admin],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
     async fn deposit_collateral(
@@ -213,7 +214,7 @@ impl TestHelper {
         amount: u64,
         deposit_period: u64,
         commission_rate: u64,
-    ) {
+    ) -> Result<(), BanksClientError> {
         let deposit_collateral_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -246,10 +247,13 @@ impl TestHelper {
             &[&self.user],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn admin_withdraw_collateral_for_investment(&self, banks_client: &mut BanksClient) {
+    async fn admin_withdraw_collateral_for_investment(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         let withdraw_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -274,10 +278,13 @@ impl TestHelper {
             &[&self.admin],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn request_withdrawal_early(&self, banks_client: &mut BanksClient) {
+    async fn request_withdrawal_early(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         let request_withdrawal_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -303,10 +310,13 @@ impl TestHelper {
             &[&self.user],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn request_withdrawal(&self, banks_client: &mut BanksClient) {
+    async fn request_withdrawal(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         let request_withdrawal_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -327,10 +337,14 @@ impl TestHelper {
             &[&self.user],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn admin_prepare_withdrawal(&self, banks_client: &mut BanksClient, user_pubkey: Pubkey) {
+    async fn admin_prepare_withdrawal(
+        &self,
+        banks_client: &mut BanksClient,
+        user_pubkey: Pubkey,
+    ) -> Result<(), BanksClientError> {
         let prepare_withdrawal_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -356,10 +370,13 @@ impl TestHelper {
             &[&self.admin],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn withdraw_collateral(&self, banks_client: &mut BanksClient) {
+    async fn withdraw_collateral(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         let withdraw_collateral_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -385,10 +402,13 @@ impl TestHelper {
             &[&self.user],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
-    async fn admin_update_config(&self, banks_client: &mut BanksClient) {
+    async fn admin_update_config(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
         let update_config_instruction = Instruction {
             program_id: self.program_id,
             accounts: vec![
@@ -416,7 +436,7 @@ impl TestHelper {
             &[&self.admin],
             banks_client.get_latest_blockhash().await.unwrap(),
         );
-        banks_client.process_transaction(transaction).await.unwrap();
+        banks_client.process_transaction(transaction).await
     }
 
     async fn read_config(
@@ -442,23 +462,6 @@ impl TestHelper {
             .unwrap();
         let token_account = TokenAccount::unpack(&account.data).unwrap();
         token_account.amount
-    }
-
-    /// Helper method to create the authority PDA
-    async fn create_authority_pda(&self, banks_client: &mut BanksClient) {
-        // Get the rent for the authority PDA
-        let rent = banks_client.get_rent().await.unwrap();
-        let min_rent = rent.minimum_balance(0); // Minimum size account
-
-        // Find the authority PDA details
-        let (authority_pda, authority_bump) =
-            Pubkey::find_program_address(&[AUTHORITY_SEED], &self.program_id);
-
-        // We actually don't need to create the account directly
-        // PDAs are owned by the program and are only created when needed
-        // For ATAs, the program will just use the bumped PDA
-
-        log::info!("Authority PDA at {}", authority_pda);
     }
 
     async fn get_user_deposit(
@@ -501,8 +504,256 @@ impl TestHelper {
         );
         banks_client.process_transaction(transaction).await.unwrap();
     }
+
+    // negative cases
+    async fn test_non_admin_operation(
+        &self,
+        banks_client: &mut BanksClient,
+    ) -> Result<(), BanksClientError> {
+        // Try to update config as non-admin user
+        let update_config_instruction = Instruction {
+            program_id: self.program_id,
+            accounts: vec![
+                AccountMeta::new(self.user.pubkey(), true), // User instead of admin
+                AccountMeta::new(self.config_pda, false),
+            ],
+            data: TokenLockInstruction::AdminUpdateConfig {
+                param: 0,
+                base_interest_rate: Some(80),
+                price_factor: None,
+                min_commission_rate: None,
+                max_commission_rate: None,
+                min_deposit_amount: None,
+                max_deposit_amount: None,
+                deposit_periods: None,
+            }
+            .try_to_vec()
+            .unwrap(),
+        };
+
+        let mut transaction =
+            Transaction::new_with_payer(&[update_config_instruction], Some(&self.user.pubkey()));
+
+        transaction.sign(
+            &[&self.user],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+
+        banks_client.process_transaction(transaction).await
+    }
 }
 
+struct TestSetup {}
+
+impl TestSetup {
+    async fn setup(
+        banks_client: &mut BanksClient,
+        admin: &Keypair,
+        interest_mint: &Keypair,
+        collateral_mint: &Keypair,
+        users: &[&Keypair],
+    ) {
+        Self::setup_mints(banks_client, admin, interest_mint, collateral_mint).await;
+        Self::setup_admin(banks_client, admin, interest_mint, collateral_mint).await;
+        for user in users {
+            Self::setup_user(banks_client, user, admin, collateral_mint, interest_mint).await;
+        }
+    }
+
+    async fn setup_mints(
+        banks_client: &mut BanksClient,
+        admin: &Keypair,
+        interest_mint: &Keypair,
+        collateral_mint: &Keypair,
+    ) {
+        // Create interest mint
+        let rent = banks_client.get_rent().await.unwrap();
+        let mint_rent = rent.minimum_balance(Mint::LEN);
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                system_instruction::create_account(
+                    &admin.pubkey(),
+                    &interest_mint.pubkey(),
+                    mint_rent,
+                    Mint::LEN as u64,
+                    &spl_token::id(),
+                ),
+                token_instruction::initialize_mint(
+                    &spl_token::id(),
+                    &interest_mint.pubkey(),
+                    &admin.pubkey(),
+                    None,
+                    6,
+                )
+                .unwrap(),
+            ],
+            Some(&admin.pubkey()),
+        );
+
+        transaction.sign(
+            &[&admin, &interest_mint],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        // Create collateral mint
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                system_instruction::create_account(
+                    &admin.pubkey(),
+                    &collateral_mint.pubkey(),
+                    mint_rent,
+                    Mint::LEN as u64,
+                    &spl_token::id(),
+                ),
+                token_instruction::initialize_mint(
+                    &spl_token::id(),
+                    &collateral_mint.pubkey(),
+                    &admin.pubkey(),
+                    None,
+                    6,
+                )
+                .unwrap(),
+            ],
+            Some(&admin.pubkey()),
+        );
+
+        transaction.sign(
+            &[&admin, &collateral_mint],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap();
+    }
+
+    async fn setup_admin(
+        banks_client: &mut BanksClient,
+        admin: &Keypair,
+        interest_mint: &Keypair,
+        collateral_mint: &Keypair,
+    ) {
+        // Create admin token accounts
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                ata_instruction::create_associated_token_account(
+                    &admin.pubkey(),
+                    &admin.pubkey(),
+                    &interest_mint.pubkey(),
+                    &spl_token::id(),
+                ),
+                ata_instruction::create_associated_token_account(
+                    &admin.pubkey(),
+                    &admin.pubkey(),
+                    &collateral_mint.pubkey(),
+                    &spl_token::id(),
+                ),
+            ],
+            Some(&admin.pubkey()),
+        );
+
+        transaction.sign(
+            &[&admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        // Mint interest tokens to admin
+        let mut transaction = Transaction::new_with_payer(
+            &[token_instruction::mint_to(
+                &spl_token::id(),
+                &interest_mint.pubkey(),
+                &spl_associated_token_account::get_associated_token_address(
+                    &admin.pubkey(),
+                    &interest_mint.pubkey(),
+                ),
+                &admin.pubkey(),
+                &[],
+                10_000_000_000_000, // 10,000,000 USDC with 6 decimals
+            )
+            .unwrap()],
+            Some(&admin.pubkey()),
+        );
+
+        transaction.sign(
+            &[&admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+        banks_client.process_transaction(transaction).await.unwrap()
+    }
+
+    // Helper function to create a new test user
+    async fn setup_user(
+        banks_client: &mut BanksClient,
+        user: &Keypair,
+        admin: &Keypair,
+        collateral_mint: &Keypair,
+        interest_mint: &Keypair,
+    ) {
+        // Fund the user account
+        let fund_ix =
+            system_instruction::transfer(&admin.pubkey(), &user.pubkey(), LAMPORTS_PER_SOL * 10);
+
+        let mut transaction = Transaction::new_with_payer(&[fund_ix], Some(&admin.pubkey()));
+
+        transaction.sign(
+            &[&admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        // Create token accounts for the user
+        let create_token_accounts_ix = [
+            ata_instruction::create_associated_token_account(
+                &admin.pubkey(),
+                &user.pubkey(),
+                &interest_mint.pubkey(),
+                &spl_token::id(),
+            ),
+            ata_instruction::create_associated_token_account(
+                &admin.pubkey(),
+                &user.pubkey(),
+                &collateral_mint.pubkey(),
+                &spl_token::id(),
+            ),
+        ];
+
+        let mut transaction =
+            Transaction::new_with_payer(&create_token_accounts_ix, Some(&admin.pubkey()));
+
+        transaction.sign(
+            &[&admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        // Mint collateral tokens to the user
+        let user_collateral_ata = spl_associated_token_account::get_associated_token_address(
+            &user.pubkey(),
+            &collateral_mint.pubkey(),
+        );
+
+        let mint_tokens_ix = token_instruction::mint_to(
+            &spl_token::id(),
+            &collateral_mint.pubkey(),
+            &user_collateral_ata,
+            &admin.pubkey(),
+            &[],
+            1_000_000_000, // 10 zBTC with 8 decimals
+        )
+        .unwrap();
+
+        let mut transaction = Transaction::new_with_payer(&[mint_tokens_ix], Some(&admin.pubkey()));
+
+        transaction.sign(
+            &[&admin],
+            banks_client.get_latest_blockhash().await.unwrap(),
+        );
+
+        banks_client.process_transaction(transaction).await.unwrap();
+    }
+}
 #[tokio::test]
 async fn test_full_flow() {
     env_logger::try_init();
@@ -554,20 +805,18 @@ async fn test_full_flow() {
     let collateral_mint = Keypair::new();
     let interest_mint = Keypair::new();
 
-    setup_mints(&mut banks_client, &admin, &interest_mint, &collateral_mint).await;
-    setup_admin(&mut banks_client, &admin, &interest_mint, &collateral_mint).await;
-    setup_user(
+    TestSetup::setup(
         &mut banks_client,
-        &user,
         &admin,
-        &collateral_mint.pubkey(),
-        &interest_mint.pubkey(),
+        &interest_mint,
+        &collateral_mint,
+        &[&user],
     )
     .await;
 
     log::info!("Creating test helper with accounts and PDAs...");
     // Initialize the test helper
-    let test_helper = TestHelper::new(admin, user, collateral_mint, interest_mint).await;
+    let test_helper = TestHelper::new(&admin, &user, &collateral_mint, &interest_mint).await;
 
     log::info!("Admin pubkey: {}", test_helper.admin.pubkey());
     log::info!("Config PDA: {}", test_helper.config_pda);
@@ -614,7 +863,10 @@ async fn test_full_flow() {
     }
 
     log::info!("Sending initialize transaction...");
-    test_helper.initialize_program(&mut banks_client).await;
+    test_helper
+        .initialize_program(&mut banks_client)
+        .await
+        .unwrap();
     log::info!("✓ Program initialized successfully");
 
     // Check account states after initialization
@@ -700,7 +952,8 @@ async fn test_full_flow() {
 
     test_helper
         .admin_deposit_interest(&mut banks_client, interest_deposit_amount)
-        .await;
+        .await
+        .unwrap();
 
     // Check balances after
     let admin_interest_after = test_helper
@@ -756,7 +1009,8 @@ async fn test_full_flow() {
             deposit_period,
             commission_rate,
         )
-        .await;
+        .await
+        .unwrap();
 
     // Check balances after
     let user_collateral_after = test_helper
@@ -877,7 +1131,8 @@ async fn test_full_flow() {
 
     test_helper
         .admin_withdraw_collateral_for_investment(&mut banks_client)
-        .await;
+        .await
+        .unwrap();
 
     // Check balances after
     let admin_collateral_after = test_helper
@@ -908,7 +1163,8 @@ async fn test_full_flow() {
     log::info!("\nUser requesting early withdrawal...");
     test_helper
         .request_withdrawal_early(&mut banks_client)
-        .await;
+        .await
+        .unwrap();
     log::info!("✓ Early withdrawal requested");
 
     // Verify deposit state changed
@@ -925,7 +1181,8 @@ async fn test_full_flow() {
     log::info!("\nAdmin preparing withdrawal...");
     test_helper
         .admin_prepare_withdrawal(&mut banks_client, test_helper.user.pubkey())
-        .await;
+        .await
+        .unwrap();
     log::info!("✓ Withdrawal prepared");
 
     // Verify deposit state changed again
@@ -950,7 +1207,10 @@ async fn test_full_flow() {
         user_collateral_before / 1_000_000
     );
 
-    test_helper.withdraw_collateral(&mut banks_client).await;
+    test_helper
+        .withdraw_collateral(&mut banks_client)
+        .await
+        .unwrap();
 
     // Check balances after
     let user_collateral_after = test_helper
@@ -1023,7 +1283,10 @@ async fn test_full_flow() {
         }
     );
 
-    test_helper.admin_update_config(&mut banks_client).await;
+    test_helper
+        .admin_update_config(&mut banks_client)
+        .await
+        .unwrap();
 
     // Get config after
     if let Ok(config_after) = test_helper.read_config(&mut banks_client).await {
@@ -1105,46 +1368,30 @@ async fn test_negative_cases() {
     let collateral_mint = Keypair::new();
     let interest_mint = Keypair::new();
 
-    setup_mints(&mut banks_client, &admin, &interest_mint, &collateral_mint).await;
-    setup_admin(&mut banks_client, &admin, &interest_mint, &collateral_mint).await;
-    setup_user(
+    TestSetup::setup(
         &mut banks_client,
-        &user1,
         &admin,
-        &collateral_mint.pubkey(),
-        &interest_mint.pubkey(),
-    )
-    .await;
-    setup_user(
-        &mut banks_client,
-        &user2,
-        &admin,
-        &collateral_mint.pubkey(),
-        &interest_mint.pubkey(),
-    )
-    .await;
-    setup_user(
-        &mut banks_client,
-        &user3,
-        &admin,
-        &collateral_mint.pubkey(),
-        &interest_mint.pubkey(),
+        &interest_mint,
+        &collateral_mint,
+        &[&user1, &user2, &user3],
     )
     .await;
 
     // Initialize the test helper
-    let test_helper = TestHelper::new(admin, user1, collateral_mint, interest_mint).await;
+    let test_helper1 = TestHelper::new(&admin, &user1, &collateral_mint, &interest_mint).await;
+    let test_helper2 = TestHelper::new(&admin, &user2, &collateral_mint, &interest_mint).await;
+    let test_helper3 = TestHelper::new(&admin, &user3, &collateral_mint, &interest_mint).await;
 
-    test_helper.initialize_program(&mut banks_client).await;
+    test_helper1.initialize_program(&mut banks_client).await;
 
     // Add some interest to the pool for tests
-    test_helper
+    test_helper1
         .admin_deposit_interest(&mut banks_client, 1_000_000_000_000)
         .await;
 
     // Negative Test 1: Deposit amount below minimum
     log::info!("\n🔍 TEST CASE: Deposit below minimum amount");
-    let min_deposit = test_helper
+    let min_deposit = test_helper1
         .read_config(&mut banks_client)
         .await
         .unwrap()
@@ -1152,14 +1399,14 @@ async fn test_negative_cases() {
     log::info!("Minimum deposit amount: {}", min_deposit);
 
     let too_small_amount = min_deposit - 1;
-    let result = test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        too_small_amount,
-        1 * SLOTS_PER_MONTH as u64,
-        200,
-    )
-    .await;
+    let result = test_helper1
+        .deposit_collateral(
+            &mut banks_client,
+            too_small_amount,
+            1 * SLOTS_PER_MONTH as u64,
+            200,
+        )
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail with amount below minimum"
@@ -1168,7 +1415,7 @@ async fn test_negative_cases() {
 
     // Negative Test 2: Deposit amount above maximum
     log::info!("\n🔍 TEST CASE: Deposit above maximum amount");
-    let max_deposit = test_helper
+    let max_deposit = test_helper1
         .read_config(&mut banks_client)
         .await
         .unwrap()
@@ -1176,14 +1423,14 @@ async fn test_negative_cases() {
     log::info!("Maximum deposit amount: {}", max_deposit);
 
     let too_large_amount = max_deposit + 1;
-    let result = test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        too_large_amount,
-        1 * SLOTS_PER_MONTH as u64,
-        200,
-    )
-    .await;
+    let result = test_helper1
+        .deposit_collateral(
+            &mut banks_client,
+            too_large_amount,
+            1 * SLOTS_PER_MONTH as u64,
+            200,
+        )
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail with amount above maximum"
@@ -1192,7 +1439,7 @@ async fn test_negative_cases() {
 
     // Negative Test 3: Invalid deposit period
     log::info!("\n🔍 TEST CASE: Invalid deposit period");
-    let config = test_helper.read_config(&mut banks_client).await.unwrap();
+    let config = test_helper1.read_config(&mut banks_client).await.unwrap();
     let invalid_period = 42; // Some arbitrary period not in the allowed list
 
     // Make sure our invalid period isn't accidentally in the allowed list
@@ -1204,14 +1451,9 @@ async fn test_negative_cases() {
     log::info!("Valid periods: {:?}", config.deposit_periods);
     log::info!("Using invalid period: {}", invalid_period);
 
-    let result = test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        20_000_000,
-        invalid_period,
-        200,
-    )
-    .await;
+    let result = test_helper1
+        .deposit_collateral(&mut banks_client, 20_000_000, invalid_period, 200)
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail with invalid deposit period"
@@ -1231,14 +1473,14 @@ async fn test_negative_cases() {
     );
     log::info!("Using too low commission: {}", too_low_commission);
 
-    let result = test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        20_000_000,
-        1 * SLOTS_PER_MONTH as u64,
-        too_low_commission,
-    )
-    .await;
+    let result = test_helper1
+        .deposit_collateral(
+            &mut banks_client,
+            20_000_000,
+            1 * SLOTS_PER_MONTH as u64,
+            too_low_commission,
+        )
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail with commission rate too low"
@@ -1249,14 +1491,14 @@ async fn test_negative_cases() {
     let too_high_commission = max_commission + 1;
     log::info!("Using too high commission: {}", too_high_commission);
 
-    let result = test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        20_000_000,
-        1 * SLOTS_PER_MONTH as u64,
-        too_high_commission,
-    )
-    .await;
+    let result = test_helper1
+        .deposit_collateral(
+            &mut banks_client,
+            20_000_000,
+            1 * SLOTS_PER_MONTH as u64,
+            too_high_commission,
+        )
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail with commission rate too high"
@@ -1267,23 +1509,23 @@ async fn test_negative_cases() {
     log::info!("\n🔍 TEST CASE: Withdraw without admin preparation");
 
     // First make a valid deposit
-    test_deposit_with_amount(
-        &test_helper,
-        &mut banks_client,
-        20_000_000,
-        1 * SLOTS_PER_MONTH as u64,
-        200,
-    )
-    .await
-    .unwrap();
+    test_helper1
+        .deposit_collateral(
+            &mut banks_client,
+            20_000_000,
+            1 * SLOTS_PER_MONTH as u64,
+            200,
+        )
+        .await
+        .unwrap();
 
     // Request withdrawal (legitimate)
-    test_helper
+    test_helper1
         .request_withdrawal_early(&mut banks_client)
         .await;
 
     // Try to withdraw without admin preparing it
-    let result = test_withdraw_without_preparation(&test_helper, &mut banks_client).await;
+    let result = test_helper1.withdraw_collateral(&mut banks_client).await;
     assert!(
         result.is_err(),
         "Withdrawal should fail without admin preparation"
@@ -1292,7 +1534,9 @@ async fn test_negative_cases() {
 
     // Negative Test 6: Non-admin trying to perform admin operation
     log::info!("\n🔍 TEST CASE: Non-admin trying to perform admin operation");
-    let result = test_non_admin_operation(&test_helper, &mut banks_client).await;
+    let result = test_helper1
+        .test_non_admin_operation(&mut banks_client)
+        .await;
     assert!(
         result.is_err(),
         "Transaction should fail when non-admin attempts admin operation"
@@ -1308,27 +1552,29 @@ async fn test_negative_cases() {
     let valid_commission = 200;
 
     // First deposit should succeed
-    let result = test_deposit_for_user(
-        &test_helper,
-        &mut banks_client,
-        &user2,
-        valid_amount,
-        valid_period,
-        valid_commission,
-    )
-    .await;
+    let result = test_helper2
+        .deposit_collateral(
+            &mut banks_client,
+            valid_amount,
+            valid_period,
+            valid_commission,
+        )
+        .await;
     assert!(result.is_ok(), "First deposit should succeed");
+    log::info!("✓ First deposit succeeded");
+
+    // Sleep for 1 second to ensure the second deposit has a different slot
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Second deposit to same account should fail
-    let result = test_deposit_for_user(
-        &test_helper,
-        &mut banks_client,
-        &user2,
-        valid_amount,
-        valid_period,
-        valid_commission,
-    )
-    .await;
+    let result = test_helper2
+        .deposit_collateral(
+            &mut banks_client,
+            valid_amount,
+            valid_period,
+            valid_commission,
+        )
+        .await;
     assert!(
         result.is_err(),
         "Second deposit to same account should fail"
@@ -1339,19 +1585,18 @@ async fn test_negative_cases() {
     log::info!("\n🔍 TEST CASE: Withdraw from deposit not in ready state");
 
     // Make a valid deposit
-    test_deposit_for_user(
-        &test_helper,
-        &mut banks_client,
-        &user3,
-        valid_amount,
-        valid_period,
-        valid_commission,
-    )
-    .await
-    .unwrap();
+    test_helper3
+        .deposit_collateral(
+            &mut banks_client,
+            valid_amount,
+            valid_period,
+            valid_commission,
+        )
+        .await
+        .unwrap();
 
     // Try to withdraw immediately without requesting withdrawal first
-    let result = test_withdraw_for_user(&test_helper, &mut banks_client, &user3).await;
+    let result = test_helper3.withdraw_collateral(&mut banks_client).await;
     assert!(
         result.is_err(),
         "Withdrawal should fail when deposit not in ready state"
@@ -1361,412 +1606,4 @@ async fn test_negative_cases() {
     log::info!("\n=============================================");
     log::info!("ALL NEGATIVE TESTS COMPLETED SUCCESSFULLY");
     log::info!("=============================================");
-}
-
-// Helper function to test deposit with specific parameters
-async fn test_deposit_with_amount(
-    test_helper: &TestHelper,
-    banks_client: &mut BanksClient,
-    amount: u64,
-    deposit_period: u64,
-    commission_rate: u64,
-) -> Result<(), BanksClientError> {
-    let deposit_instruction = Instruction {
-        program_id: test_helper.program_id,
-        accounts: vec![
-            AccountMeta::new(test_helper.user.pubkey(), true),
-            AccountMeta::new_readonly(test_helper.config_pda, false),
-            AccountMeta::new_readonly(test_helper.authority_pda, false),
-            AccountMeta::new(test_helper.user_collateral_ata, false),
-            AccountMeta::new(test_helper.user_deposit_account, false),
-            AccountMeta::new(test_helper.collateral_pool_ata, false),
-            AccountMeta::new(test_helper.user_interest_ata, false),
-            AccountMeta::new(test_helper.interest_pool_ata, false),
-            AccountMeta::new_readonly(solana_program::system_program::id(), false),
-            AccountMeta::new_readonly(spl_token::id(), false),
-        ],
-        data: TokenLockInstruction::DepositCollateral {
-            amount,
-            deposit_period,
-            commission_rate,
-        }
-        .try_to_vec()
-        .unwrap(),
-    };
-
-    let mut transaction =
-        Transaction::new_with_payer(&[deposit_instruction], Some(&test_helper.user.pubkey()));
-
-    transaction.sign(
-        &[&test_helper.user],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await
-}
-
-// Helper function to test withdrawal without admin preparation
-async fn test_withdraw_without_preparation(
-    test_helper: &TestHelper,
-    banks_client: &mut BanksClient,
-) -> Result<(), BanksClientError> {
-    let withdraw_instruction = Instruction {
-        program_id: test_helper.program_id,
-        accounts: vec![
-            AccountMeta::new(test_helper.user.pubkey(), true),
-            AccountMeta::new_readonly(test_helper.config_pda, false),
-            AccountMeta::new_readonly(test_helper.authority_pda, false),
-            AccountMeta::new(test_helper.user_deposit_account, false),
-            AccountMeta::new(test_helper.user_collateral_ata, false),
-            AccountMeta::new(test_helper.withdrawal_pool_pda, false),
-            AccountMeta::new_readonly(spl_token::id(), false),
-        ],
-        data: TokenLockInstruction::WithdrawCollateral
-            .try_to_vec()
-            .unwrap(),
-    };
-
-    let mut transaction =
-        Transaction::new_with_payer(&[withdraw_instruction], Some(&test_helper.user.pubkey()));
-
-    transaction.sign(
-        &[&test_helper.user],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await
-}
-
-// Helper function to test non-admin trying to perform admin operation
-async fn test_non_admin_operation(
-    test_helper: &TestHelper,
-    banks_client: &mut BanksClient,
-) -> Result<(), BanksClientError> {
-    // Try to update config as non-admin user
-    let update_config_instruction = Instruction {
-        program_id: test_helper.program_id,
-        accounts: vec![
-            AccountMeta::new(test_helper.user.pubkey(), true), // User instead of admin
-            AccountMeta::new(test_helper.config_pda, false),
-        ],
-        data: TokenLockInstruction::AdminUpdateConfig {
-            param: 0,
-            base_interest_rate: Some(80),
-            price_factor: None,
-            min_commission_rate: None,
-            max_commission_rate: None,
-            min_deposit_amount: None,
-            max_deposit_amount: None,
-            deposit_periods: None,
-        }
-        .try_to_vec()
-        .unwrap(),
-    };
-
-    let mut transaction = Transaction::new_with_payer(
-        &[update_config_instruction],
-        Some(&test_helper.user.pubkey()),
-    );
-
-    transaction.sign(
-        &[&test_helper.user],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await
-}
-
-async fn setup_mints(
-    banks_client: &mut BanksClient,
-    admin: &Keypair,
-    interest_mint: &Keypair,
-    collateral_mint: &Keypair,
-) {
-    // Create interest mint
-    let rent = banks_client.get_rent().await.unwrap();
-    let mint_rent = rent.minimum_balance(Mint::LEN);
-
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            system_instruction::create_account(
-                &admin.pubkey(),
-                &interest_mint.pubkey(),
-                mint_rent,
-                Mint::LEN as u64,
-                &spl_token::id(),
-            ),
-            token_instruction::initialize_mint(
-                &spl_token::id(),
-                &interest_mint.pubkey(),
-                &admin.pubkey(),
-                None,
-                6,
-            )
-            .unwrap(),
-        ],
-        Some(&admin.pubkey()),
-    );
-
-    transaction.sign(
-        &[&admin, &interest_mint],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Create collateral mint
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            system_instruction::create_account(
-                &admin.pubkey(),
-                &collateral_mint.pubkey(),
-                mint_rent,
-                Mint::LEN as u64,
-                &spl_token::id(),
-            ),
-            token_instruction::initialize_mint(
-                &spl_token::id(),
-                &collateral_mint.pubkey(),
-                &admin.pubkey(),
-                None,
-                6,
-            )
-            .unwrap(),
-        ],
-        Some(&admin.pubkey()),
-    );
-
-    transaction.sign(
-        &[&admin, &collateral_mint],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
-}
-
-async fn setup_admin(
-    banks_client: &mut BanksClient,
-    admin: &Keypair,
-    interest_mint: &Keypair,
-    collateral_mint: &Keypair,
-) {
-    // Create admin token accounts
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            ata_instruction::create_associated_token_account(
-                &admin.pubkey(),
-                &admin.pubkey(),
-                &interest_mint.pubkey(),
-                &spl_token::id(),
-            ),
-            ata_instruction::create_associated_token_account(
-                &admin.pubkey(),
-                &admin.pubkey(),
-                &collateral_mint.pubkey(),
-                &spl_token::id(),
-            ),
-        ],
-        Some(&admin.pubkey()),
-    );
-
-    transaction.sign(
-        &[&admin],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Mint interest tokens to admin
-    let mut transaction = Transaction::new_with_payer(
-        &[token_instruction::mint_to(
-            &spl_token::id(),
-            &interest_mint.pubkey(),
-            &spl_associated_token_account::get_associated_token_address(
-                &admin.pubkey(),
-                &interest_mint.pubkey(),
-            ),
-            &admin.pubkey(),
-            &[],
-            10_000_000_000_000, // 10,000,000 USDC with 6 decimals
-        )
-        .unwrap()],
-        Some(&admin.pubkey()),
-    );
-
-    transaction.sign(
-        &[&admin],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-    banks_client.process_transaction(transaction).await.unwrap()
-}
-
-// Helper function to create a new test user
-async fn setup_user(
-    banks_client: &mut BanksClient,
-    user: &Keypair,
-    admin: &Keypair,
-    collateral_mint: &Pubkey,
-    interest_mint: &Pubkey,
-) {
-    // Fund the user account
-    let fund_ix =
-        system_instruction::transfer(&admin.pubkey(), &user.pubkey(), LAMPORTS_PER_SOL * 10);
-
-    let mut transaction = Transaction::new_with_payer(&[fund_ix], Some(&admin.pubkey()));
-
-    transaction.sign(
-        &[&admin],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Create token accounts for the user
-    let create_token_accounts_ix = [
-        ata_instruction::create_associated_token_account(
-            &admin.pubkey(),
-            &user.pubkey(),
-            &interest_mint,
-            &spl_token::id(),
-        ),
-        ata_instruction::create_associated_token_account(
-            &admin.pubkey(),
-            &user.pubkey(),
-            &collateral_mint,
-            &spl_token::id(),
-        ),
-    ];
-
-    let mut transaction =
-        Transaction::new_with_payer(&create_token_accounts_ix, Some(&admin.pubkey()));
-
-    transaction.sign(
-        &[&admin],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Mint collateral tokens to the user
-    let user_collateral_ata = spl_associated_token_account::get_associated_token_address(
-        &user.pubkey(),
-        &collateral_mint,
-    );
-
-    let mint_tokens_ix = token_instruction::mint_to(
-        &spl_token::id(),
-        &collateral_mint,
-        &user_collateral_ata,
-        &admin.pubkey(),
-        &[],
-        1_000_000_000, // 10 zBTC with 8 decimals
-    )
-    .unwrap();
-
-    let mut transaction = Transaction::new_with_payer(&[mint_tokens_ix], Some(&admin.pubkey()));
-
-    transaction.sign(
-        &[&admin],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await.unwrap();
-}
-
-// Helper function for user-specific deposit
-async fn test_deposit_for_user(
-    test_helper: &TestHelper,
-    banks_client: &mut BanksClient,
-    user: &Keypair,
-    amount: u64,
-    deposit_period: u64,
-    commission_rate: u64,
-) -> Result<(), BanksClientError> {
-    // Get the user's token accounts
-    let user_collateral_ata = spl_associated_token_account::get_associated_token_address(
-        &user.pubkey(),
-        &test_helper.collateral_mint.pubkey(),
-    );
-
-    let user_interest_ata = spl_associated_token_account::get_associated_token_address(
-        &user.pubkey(),
-        &test_helper.interest_mint.pubkey(),
-    );
-
-    // Find the user's deposit account PDA
-    let (user_deposit_account, _) =
-        Pubkey::find_program_address(&[user.pubkey().as_ref()], &test_helper.program_id);
-
-    let deposit_instruction = Instruction {
-        program_id: test_helper.program_id,
-        accounts: vec![
-            AccountMeta::new(user.pubkey(), true),
-            AccountMeta::new_readonly(test_helper.config_pda, false),
-            AccountMeta::new_readonly(test_helper.authority_pda, false),
-            AccountMeta::new(user_collateral_ata, false),
-            AccountMeta::new(user_deposit_account, false),
-            AccountMeta::new(test_helper.collateral_pool_ata, false),
-            AccountMeta::new(user_interest_ata, false),
-            AccountMeta::new(test_helper.interest_pool_ata, false),
-            AccountMeta::new_readonly(solana_program::system_program::id(), false),
-            AccountMeta::new_readonly(spl_token::id(), false),
-        ],
-        data: TokenLockInstruction::DepositCollateral {
-            amount,
-            deposit_period,
-            commission_rate,
-        }
-        .try_to_vec()
-        .unwrap(),
-    };
-
-    let mut transaction =
-        Transaction::new_with_payer(&[deposit_instruction], Some(&test_helper.admin.pubkey()));
-
-    transaction.sign(
-        &[&test_helper.admin, user],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await
-}
-
-// Helper function for user-specific withdrawal
-async fn test_withdraw_for_user(
-    test_helper: &TestHelper,
-    banks_client: &mut BanksClient,
-    user: &Keypair,
-) -> Result<(), BanksClientError> {
-    // Get the user's token accounts
-    let user_collateral_ata = spl_associated_token_account::get_associated_token_address(
-        &user.pubkey(),
-        &test_helper.collateral_mint.pubkey(),
-    );
-
-    // Find the user's deposit account PDA
-    let (user_deposit_account, _) =
-        Pubkey::find_program_address(&[user.pubkey().as_ref()], &test_helper.program_id);
-
-    let withdraw_instruction = Instruction {
-        program_id: test_helper.program_id,
-        accounts: vec![
-            AccountMeta::new(user.pubkey(), true),
-            AccountMeta::new_readonly(test_helper.config_pda, false),
-            AccountMeta::new_readonly(test_helper.authority_pda, false),
-            AccountMeta::new(user_deposit_account, false),
-            AccountMeta::new(user_collateral_ata, false),
-            AccountMeta::new(test_helper.withdrawal_pool_pda, false),
-            AccountMeta::new_readonly(spl_token::id(), false),
-        ],
-        data: TokenLockInstruction::WithdrawCollateral
-            .try_to_vec()
-            .unwrap(),
-    };
-
-    let mut transaction =
-        Transaction::new_with_payer(&[withdraw_instruction], Some(&test_helper.admin.pubkey()));
-
-    transaction.sign(
-        &[&test_helper.admin, user],
-        banks_client.get_latest_blockhash().await.unwrap(),
-    );
-
-    banks_client.process_transaction(transaction).await
 }
