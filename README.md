@@ -21,13 +21,12 @@ This repository is a monorepo that contains:
 
 | Path | What lives here |
 |------|-----------------|
-| `program/` | Rust workspace that compiles to the **Breakout** BPF
-|     | contract (`breakout_contract`) – the token-lock / interest bearing
+| `program/` | Rust workspace that compiles to the **Astrape** BPF
+|     | contract – the token-lock / interest bearing
 |     | pool deployed on Solana.|
-| `admin-utils/` | Small Rust binaries that allow an operator to initialise
-|        | the programme, update configuration, and deposit profits. |
+| `admin-utils/` | Rust binaries that allow an admin account to interact with the on-chain program
 | `client/` | **Orpheus** – a Next.js (+ Tailwind) app that interacts with
-|      | the programme through @solana/web3.js. This is the recommended
+|      | the program through @solana/web3.js. This is the recommended
 |      | starting point for building your own UI. |
 
 ---
@@ -48,51 +47,56 @@ This repository is a monorepo that contains:
 Clone the repo and enter the workspace root:
 
 ```bash
-$ git clone https://github.com/<you>/astrape.git
-$ cd astrape
+$ git clone https://github.com/kws1207/astrape.git
 ```
 
-### 1. Build & test the on-chain programme
+### 1. Build & test the on-chain program
+
+You can set hard-coded privileged admin account before compile and deploy the program in `processor.rs` 
+```rust
+pub mod admin {
+  solana_program::declare_id!("EjYMbwtvCjAdMB2RPu45QKPBEE5gTPSJBktzTro5VigV");
+}
+```
+
+#### Testing
+```bash
+$ cd program
+$ ADMIN_KEYPAIR=/path/to/admin_keypair cargo test # For better printing, give `RUST_LOG=solana_runtime=debug,integration=info` env var
+```
+
+#### Building contract
 
 ```bash
 # Build the BPF artefact
 $ cd program
-$ cargo build-sbf        # outputs under program/target/deploy
-
-# Run the integration tests locally with solana-program-test
-$ cargo test -- --nocapture
+$ cargo build-sbf --features devnet   # configure `--features` flag to choose cluster to deploy. It will configure the admin account.
 ```
 
-### 2. Deploy to Devnet
+### 2. Deploying Contract
 
 ```bash
-# make sure your cli is targeting devnet
-$ solana config set --url https://api.devnet.solana.com
-
-# deploy – keep the resulting program id, you will need it later
-$ solana program deploy target/deploy/breakout_contract.so
+$ solana program deploy --program-id <PROGRAM_ID> \
+  --keypair <KEYPAIR> \
+  --url https://api.devnet.solana.com \  # For devnet
+  target/deploy/astrape.so
 ```
 
 ### 3. Initialise the pool (admin-utils)
 
+Each binary script is corresponding to the admin instruction of the contract in `instructions.rs` (if any)
+
+So to initialize the contract for example, run
+
 ```bash
 $ cd ../admin-utils
 
-# build the binaries
-$ cargo build --release
-
-# run the initialisation script
-$ ./target/release/initialize \
-    --keypair ~/.config/solana/id.json \
+$ cargo run --bin initialize -- \
+    --keypair /path/to/admin_keypair \
     --url https://api.devnet.solana.com
 ```
 
-The binary will automatically derive and print all PDA addresses and send
-an initialisation transaction that wires everything together.
-
-The constants used (collateral mint, interest mint, default rates) live in
-`admin-utils/src/lib.rs` – adjust them if you are working with custom
-tokens.
+(For now, the concrete values for each operation should be fixed directly on the script code)
 
 ### 4. Launch the front-end
 
@@ -108,23 +112,3 @@ cluster selected in your wallet (e.g. Phantom or Solflare).
 > For a production build run `npm run build && npm run start`.
 
 ---
-
-## Useful scripts
-
-```bash
-# format all Rust crates
-cargo +stable fmt --all
-
-# run clippy
-cargo +stable clippy --all-targets --all-features -- -D warnings
-
-# lint the Next.js project
-npm run lint --prefix client
-```
-
----
-
-## License
-
-This project is licensed under the **Apache-2.0** license – see the
-`LICENSE` file for details. 
