@@ -15,6 +15,48 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import DepositSuccessModal from "./modal";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import BigNumber from "bignumber.js";
+import useSWR from "swr";
+import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
+import { BTC_DECIMALS } from "@/utils/constant";
+import { formatValue } from "@/utils/format";
+
+// Custom hook to fetch zBTC balance with specific token mint
+const useZbtcBalance = (walletPublicKey: PublicKey | null) => {
+  const { connection } = useConnection();
+  const ZBTC_MINT = new PublicKey(
+    "91AgzqSfXnCq6AJm5CPPHL3paB25difEJ1TfSnrFKrf"
+  );
+
+  const balanceFetcher = async (publicKey: PublicKey, mint: PublicKey) => {
+    try {
+      const ata = await getAssociatedTokenAddress(mint, publicKey, true);
+      const accountData = await getAccount(connection, ata);
+      return new BigNumber(accountData.amount.toString());
+    } catch {
+      return new BigNumber(0);
+    }
+  };
+
+  const { data, isLoading } = useSWR<BigNumber>(
+    walletPublicKey ? [walletPublicKey.toBase58(), "zbtc-balance"] : null,
+    async ([pubkeyStr]) => {
+      return balanceFetcher(new PublicKey(pubkeyStr), ZBTC_MINT);
+    },
+    {
+      refreshInterval: 30000,
+      dedupingInterval: 30000,
+    }
+  );
+
+  return {
+    balance: data ?? new BigNumber(0),
+    isLoading,
+  };
+};
 
 type DepositPeriod = "1M" | "3M" | "6M";
 
@@ -257,6 +299,27 @@ function AmountAndPeriodStep({
   onChangeDepositAmount: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickNext: () => void;
 }) {
+  const { publicKey } = useWallet();
+  const { balance: zbtcBalance, isLoading: isZbtcBalanceLoading } =
+    useZbtcBalance(publicKey);
+  const formattedZbtcBalance = useMemo(() => {
+    return formatValue(zbtcBalance.div(10 ** BTC_DECIMALS), 6);
+  }, [zbtcBalance]);
+
+  const isDepositValid = useMemo(() => {
+    if (!publicKey) return false;
+    if (isZbtcBalanceLoading) return false;
+    return depositAmount <= zbtcBalance.div(10 ** BTC_DECIMALS).toNumber();
+  }, [publicKey, depositAmount, zbtcBalance, isZbtcBalanceLoading]);
+
+  const buttonText = useMemo(() => {
+    if (!publicKey) return "Connect Wallet to Continue";
+    if (depositAmount > zbtcBalance.div(10 ** BTC_DECIMALS).toNumber()) {
+      return "Insufficient Balance";
+    }
+    return "Next";
+  }, [publicKey, depositAmount, zbtcBalance]);
+
   return (
     <>
       <h2 className="mb-4 text-2xl font-bold text-shade-primary">
@@ -305,6 +368,32 @@ function AmountAndPeriodStep({
             </div>
           </div>
         </div>
+
+        {/* Wallet balance indicator */}
+        <div className="mb-3 mt-1 flex items-center justify-end">
+          <div className="flex items-center gap-1 text-sm text-shade-secondary">
+            <Icon
+              name="WalletSmall"
+              size={14}
+              className="text-primary-apollo"
+            />
+            <span>
+              {isZbtcBalanceLoading ? (
+                "Loading balance..."
+              ) : publicKey ? (
+                <>
+                  Available:{" "}
+                  <span className="font-medium text-primary-apollo">
+                    {formattedZbtcBalance} zBTC
+                  </span>
+                </>
+              ) : (
+                "Connect wallet to see balance"
+              )}
+            </span>
+          </div>
+        </div>
+
         <div className="mb-2 mt-4">
           <span className="text-sm font-medium text-shade-secondary">
             Adjust Amount
@@ -336,10 +425,15 @@ function AmountAndPeriodStep({
       </div>
 
       <button
-        className="mt-6 w-full rounded-xl bg-primary-apollo py-3 text-white transition-all hover:bg-primary-apollo/90"
+        className={`mt-6 w-full rounded-xl py-3 text-white transition-all ${
+          isDepositValid
+            ? "bg-primary-apollo hover:bg-primary-apollo/90"
+            : "cursor-not-allowed bg-primary-apollo/50"
+        }`}
         onClick={onClickNext}
+        disabled={!isDepositValid}
       >
-        Next
+        {buttonText}
       </button>
     </>
   );
