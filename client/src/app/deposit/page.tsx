@@ -24,7 +24,7 @@ const depositPeriodsDisplayText: Record<DepositPeriod, string> = {
   "6M": "6 Months",
 };
 
-const slotCountMap: Record<DepositPeriod, number> = {
+export const slotCountMap: Record<DepositPeriod, number> = {
   "1M": 5890909,
   "3M": 17672727,
   "6M": 35345454,

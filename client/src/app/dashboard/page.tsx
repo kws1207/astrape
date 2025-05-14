@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useState } from "react";
 import { useZplClient } from "@/contexts/ZplClientProvider";
+import { slotCountMap } from "../deposit/page";
 
 const getStateLabel = (state: UserDepositState) => {
   switch (state) {
@@ -165,22 +166,53 @@ const DepositTimeline = ({ userDeposit }: { userDeposit: UserDeposit }) => {
   const [depositTime, setDepositTime] = useState<number>(0);
   const [unlockTime, setUnlockTime] = useState<number>(0);
 
+  // Fetch deposit time when client or deposit changes
   useEffect(() => {
-    const updateTimeAndProgress = async () => {
+    const fetchDepositTime = async () => {
       if (!zplClient) return;
 
       const newUserDepositTime = await zplClient.getBlockTime(
         userDeposit.depositSlot
       );
+
       if (newUserDepositTime) {
         setDepositTime(newUserDepositTime);
       }
+    };
 
-      const currentSlot = await zplClient.getCurrentSlot();
-      setUnlockTime(Date.now() / 1000 + (userDeposit.unlockSlot - currentSlot));
+    fetchDepositTime();
+  }, [zplClient, userDeposit.depositSlot]);
 
+  // Calculate unlock time when deposit time or slots change
+  useEffect(() => {
+    if (!depositTime) return;
+
+    const months = Number(
+      Object.entries(slotCountMap)
+        .find(
+          ([, slotCount]) =>
+            slotCount === userDeposit.unlockSlot - userDeposit.depositSlot
+        )?.[0]
+        .replace("M", "")
+    );
+
+    // Create a date object from the deposit time
+    const depositDate = new Date(depositTime * 1000);
+    // Create a new date for the unlock time
+    const unlockDate = new Date(depositDate);
+    // Add exactly the number of months, properly handling month boundaries
+    unlockDate.setMonth(unlockDate.getMonth() + months);
+    // Convert back to Unix timestamp
+    setUnlockTime(Math.floor(unlockDate.getTime() / 1000));
+  }, [depositTime, userDeposit.unlockSlot, userDeposit.depositSlot]);
+
+  // Update time until unlock and progress
+  useEffect(() => {
+    if (!unlockTime || !depositTime) return;
+
+    const updateDisplayValues = () => {
       setTimeUntilUnlock(
-        `${Math.max(0, Math.floor((unlockTime * 1000 - Date.now()) / (1000 * 60 * 60 * 24))).toFixed(0)} days`
+        `${Math.max(0, Math.floor((unlockTime - Date.now() / 1000) / (60 * 60 * 24))).toFixed(0)} days`
       );
 
       setProgress(
@@ -193,12 +225,12 @@ const DepositTimeline = ({ userDeposit }: { userDeposit: UserDeposit }) => {
       );
     };
 
-    updateTimeAndProgress();
+    updateDisplayValues();
 
     // Update every minute
-    const intervalId = setInterval(updateTimeAndProgress, 60000);
+    const intervalId = setInterval(updateDisplayValues, 60000);
     return () => clearInterval(intervalId);
-  }, [userDeposit, zplClient]);
+  }, [unlockTime, depositTime]);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
