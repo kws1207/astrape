@@ -1,6 +1,7 @@
 import * as borsh from "@coral-xyz/borsh";
 import { Structure } from "@solana/buffer-layout";
 import { PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
 
 export interface AstrapeConfig {
   interestMint: PublicKey;
@@ -65,7 +66,26 @@ export const userDepositSchema: Structure<UserDeposit> = borsh.struct([
 
 export function deserializeUserDeposit(data: Buffer): UserDeposit {
   if (!data) throw new Error("Data is undefined");
-  return userDepositSchema.decode(data);
+  const decoded = userDepositSchema.decode(data);
+
+  const COLLATERAL_DECIMALS = 8; // zBTC has 8 decimals (satoshis)
+  const INTEREST_DECIMALS = 6; // USDC has 6 decimals
+  const COMMISSION_DECIMALS = 1; // Commission stored in tenths of a percent
+
+  return {
+    amount:
+      (decoded.amount as unknown as BN).toNumber() /
+      Math.pow(10, COLLATERAL_DECIMALS),
+    depositSlot: (decoded.depositSlot as unknown as BN).toNumber(),
+    unlockSlot: (decoded.unlockSlot as unknown as BN).toNumber(),
+    interestReceived:
+      (decoded.interestReceived as unknown as BN).toNumber() /
+      Math.pow(10, INTEREST_DECIMALS),
+    state: decoded.state,
+    commissionRate:
+      (decoded.commissionRate as unknown as BN).toNumber() /
+      Math.pow(10, COMMISSION_DECIMALS),
+  };
 }
 
 export interface PoolState {
