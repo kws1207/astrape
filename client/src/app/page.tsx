@@ -82,7 +82,7 @@ export default function Home() {
               <p className="mb-8 text-xl text-shade-secondary md:text-xl">
                 Receive your yield upfront.
                 <span className="ml-2 rounded-lg bg-primary-apollo/10 px-3 py-1 font-bold text-primary-apollo">
-                  Use Now, Sell Never.
+                  Cash Now, Sell Never.
                 </span>
               </p>
             </div>
@@ -139,7 +139,7 @@ export default function Home() {
               <div className="rounded-xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/5 p-5">
                 <div className="mb-4 text-center">
                   <span className="mb-1 block text-shade-secondary">
-                    You&apos;ll Receive Instantly
+                    You&apos;ll Instantly Receive
                   </span>
                   <span className="text-3xl font-bold text-primary-apollo">
                     {formatCurrency(interestAmount)}
@@ -150,7 +150,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-center">
                   <Button
-                    label="Start Earning Now"
+                    label="Cash Now"
                     type="primary"
                     size="medium"
                     onClick={handleGetStarted}
