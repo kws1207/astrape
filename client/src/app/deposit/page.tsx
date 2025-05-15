@@ -280,6 +280,9 @@ function AmountAndPeriodStep({
   onChangeDepositAmount: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClickNext: () => void;
 }) {
+  const { config: astrapeConfig } = useAstrape();
+  const minDepositAmount = astrapeConfig?.minDepositAmount ?? 0.001;
+  const maxDepositAmount = astrapeConfig?.maxDepositAmount ?? 10;
   const { publicKey } = useWallet();
   const { balance: zbtcBalance, isLoading: isZbtcBalanceLoading } =
     useZbtcBalance(publicKey);
@@ -290,16 +293,37 @@ function AmountAndPeriodStep({
   const isDepositValid = useMemo(() => {
     if (!publicKey) return false;
     if (isZbtcBalanceLoading) return false;
+    if (depositAmount < minDepositAmount || depositAmount > maxDepositAmount)
+      return false;
     return depositAmount <= zbtcBalance.div(10 ** BTC_DECIMALS).toNumber();
-  }, [publicKey, depositAmount, zbtcBalance, isZbtcBalanceLoading]);
+  }, [
+    publicKey,
+    depositAmount,
+    zbtcBalance,
+    isZbtcBalanceLoading,
+    minDepositAmount,
+    maxDepositAmount,
+  ]);
 
   const buttonText = useMemo(() => {
     if (!publicKey) return "Connect Wallet to Continue";
+    if (depositAmount < minDepositAmount) {
+      return `Min ${minDepositAmount} zBTC`;
+    }
+    if (depositAmount > maxDepositAmount) {
+      return `Max ${maxDepositAmount} zBTC`;
+    }
     if (depositAmount > zbtcBalance.div(10 ** BTC_DECIMALS).toNumber()) {
       return "Insufficient Balance";
     }
     return "Next";
-  }, [publicKey, depositAmount, zbtcBalance]);
+  }, [
+    publicKey,
+    depositAmount,
+    zbtcBalance,
+    minDepositAmount,
+    maxDepositAmount,
+  ]);
 
   return (
     <>
@@ -313,6 +337,8 @@ function AmountAndPeriodStep({
               <input
                 type="number"
                 value={depositAmount}
+                min={minDepositAmount}
+                max={maxDepositAmount}
                 onChange={onChangeDepositAmount}
                 className="w-[80px] appearance-none border-none bg-transparent text-3xl font-bold text-primary-apollo outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
@@ -382,16 +408,16 @@ function AmountAndPeriodStep({
         </div>
         <input
           type="range"
-          min={0.001}
-          max={10}
+          min={minDepositAmount}
+          max={maxDepositAmount}
           step={0.001}
           value={depositAmount}
           onChange={onChangeDepositAmount}
           className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-primary-apollo/20"
         />
         <div className="mt-1 flex justify-between text-xs text-shade-secondary">
-          <span>0.001 zBTC</span>
-          <span>10 zBTC</span>
+          <span>{minDepositAmount} zBTC</span>
+          <span>{maxDepositAmount} zBTC</span>
         </div>
       </div>
 

@@ -27,7 +27,12 @@ export const astrapeConfigSchema: Structure<AstrapeConfig> = borsh.struct([
 
 export function deserializeAstrapeConfig(data: Buffer): AstrapeConfig {
   if (!data) throw new Error("Data is undefined");
-  return astrapeConfigSchema.decode(data);
+  const decoded = astrapeConfigSchema.decode(data);
+  return {
+    ...decoded,
+    minDepositAmount: decoded.minDepositAmount / 10,
+    maxDepositAmount: decoded.maxDepositAmount / 10,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
