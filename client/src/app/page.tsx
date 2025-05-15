@@ -307,7 +307,7 @@ export default function Home() {
                 </h3>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-shade-secondary">Deposit Amount</span>
-                  <span className="font-medium">1 BTC</span>
+                  <span className="font-medium">10 BTC</span>
                 </div>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-shade-secondary">Deposit Period</span>
@@ -326,7 +326,7 @@ export default function Home() {
                     Annual Interest Rate
                   </span>
                   <span className="text-3xl font-bold text-shade-primary">
-                    up to 21.32%
+                    up to 12.48%
                   </span>
                 </div>
               </div>
