@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://astrape.netlify.app/"),
   title: "Astrape",
   description:
-    "Astrape: Deposit BTC & Claim your Yield Now. Receive your yield upfront. Use Now, Sell Never.",
+    "Astrape: Deposit BTC & Claim your Yield Now. Receive your yield upfront. Cash Now, Sell Never.",
   openGraph: {
     images: ["/graphics/metadata-img.jpg"],
     title: "Astrape",
