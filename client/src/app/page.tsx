@@ -279,7 +279,7 @@ export default function Home() {
                       Monitor asset value in real-time
                     </span>
                     <span className="text-sm text-shade-secondary">
-                      Track your BTC and zBTC values
+                      Track your BTC and claimed yield
                     </span>
                   </div>
                 </li>
@@ -338,7 +338,7 @@ export default function Home() {
       <section className="mx-4 my-12 rounded-3xl bg-gradient-to-r from-primary-apollo/10 to-primary-apollo/20 px-4 py-20 md:mx-8">
         <div className="mx-auto max-w-5xl text-center">
           <h2 className="mb-6 text-3xl font-bold text-shade-primary md:text-4xl">
-            Deposit BTC and Earn Interest Now
+            Deposit BTC and Cash Now
           </h2>
           <p className="mx-auto mb-10 max-w-3xl text-lg text-shade-secondary">
             Don&apos;t wait any longer. Deposit now and claim your interest
