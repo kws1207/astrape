@@ -112,3 +112,5 @@ cluster selected in your wallet (e.g. Phantom or Solflare).
 > For a production build run `npm run build && npm run start`.
 
 ---
+
+![image](https://github.com/user-attachments/assets/a641060e-c46c-420e-97c3-fcc73cad2461)
