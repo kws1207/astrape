@@ -21,13 +21,9 @@ This repository is a monorepo that contains:
 
 | Path | What lives here |
 |------|-----------------|
-| `program/` | Rust workspace that compiles to the **Astrape** BPF
-|     | contract – the token-lock / interest bearing
-|     | pool deployed on Solana.|
-| `admin-utils/` | Rust binaries that allow an admin account to interact with the on-chain program
-| `client/` | **Orpheus** – a Next.js (+ Tailwind) app that interacts with
-|      | the program through @solana/web3.js. This is the recommended
-|      | starting point for building your own UI. |
+| `program/` | Rust workspace that compiles to the **Astrape** BPF contract – the token-lock / interest bearing pool deployed on Solana.|
+| `admin-utils/` | Rust binaries that allow an admin account to interact with the on-chain program.
+| `client/` | Next.js client that interacts with the program through @solana/web3.js and Apollo SDK. |
 
 ---
 
@@ -50,7 +46,7 @@ Clone the repo and enter the workspace root:
 $ git clone https://github.com/kws1207/astrape.git
 ```
 
-### 1. Build & test the on-chain program
+### Build & test the on-chain program
 
 You can set hard-coded privileged admin account before compile and deploy the program in `processor.rs` 
 ```rust
@@ -73,24 +69,24 @@ $ cd program
 $ cargo build-sbf --features devnet   # configure `--features` flag to choose cluster to deploy. It will configure the admin account.
 ```
 
-### 2. Deploying Contract
+### Deploying Contract
 
 ```bash
+$ cd program
 $ solana program deploy --program-id <PROGRAM_ID> \
   --keypair <KEYPAIR> \
   --url https://api.devnet.solana.com \  # For devnet
   target/deploy/astrape.so
 ```
 
-### 3. Initialise the pool (admin-utils)
+### Initialise the pool (admin-utils)
 
 Each binary script is corresponding to the admin instruction of the contract in `instructions.rs` (if any)
 
 So to initialize the contract for example, run
 
 ```bash
-$ cd ../admin-utils
-
+$ cd admin-utils
 $ cargo run --bin initialize -- \
     --keypair /path/to/admin_keypair \
     --url https://api.devnet.solana.com
@@ -98,10 +94,10 @@ $ cargo run --bin initialize -- \
 
 (For now, the concrete values for each operation should be fixed directly on the script code)
 
-### 4. Launch the front-end
+### Launch the front-end
 
 ```bash
-$ cd ../client
+$ cd client
 $ npm ci
 $ npm run dev
 ```
