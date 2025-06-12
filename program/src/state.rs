@@ -30,7 +30,8 @@ pub struct AstrapeConfig {
     pub interest_mint: Pubkey,
     pub collateral_mint: Pubkey,
     pub base_interest_rate: u64, // Fixed decimal at the first decimal place
-    pub price_factor: u64, // collateral token amount * price_factor = interest token amount for the same value (decimal considered)
+
+    pub pyth_price_max_age: u64,
 
     pub min_commission_rate: u64, // Fixed decimal at the first decimal place
     pub max_commission_rate: u64, // Fixed decimal at the first decimal place

@@ -1,6 +1,6 @@
 use {
     astrape::{
-        instructions::TokenLockInstruction,
+        instructions::AstrapeInstruction,
         processor::{
             Processor, AUTHORITY_SEED, CONFIG_SEED, SLOTS_PER_MONTH, WITHDRAWAL_POOL_SEED,
         },
@@ -144,7 +144,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new_readonly(spl_associated_token_account::id(), false), // ATA program
                 AccountMeta::new_readonly(Rent::id(), false),      // Rent sysvar
             ],
-            data: TokenLockInstruction::Initialize {
+            data: AstrapeInstruction::Initialize {
                 interest_mint: self.interest_mint.pubkey(),
                 collateral_mint: self.collateral_mint.pubkey(),
                 base_interest_rate: 50, // 5% annual rate (in basis points)
@@ -193,7 +193,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new_readonly(spl_token::id(), false),
                 AccountMeta::new_readonly(spl_associated_token_account::id(), false),
             ],
-            data: TokenLockInstruction::AdminDepositInterest { amount }
+            data: AstrapeInstruction::AdminDepositInterest { amount }
                 .try_to_vec()
                 .unwrap(),
         };
@@ -231,7 +231,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new_readonly(solana_program::system_program::id(), false),
                 AccountMeta::new_readonly(spl_token::id(), false),
             ],
-            data: TokenLockInstruction::DepositCollateral {
+            data: AstrapeInstruction::DepositCollateral {
                 amount,
                 deposit_period,
                 commission_rate,
@@ -268,7 +268,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new_readonly(spl_token::id(), false), // Token program
                 AccountMeta::new_readonly(spl_associated_token_account::id(), false), // ATA program
             ],
-            data: TokenLockInstruction::AdminWithdrawCollateralForInvestment
+            data: AstrapeInstruction::AdminWithdrawCollateralForInvestment
                 .try_to_vec()
                 .unwrap(),
         };
@@ -298,7 +298,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.interest_pool_ata, false),
                 AccountMeta::new_readonly(spl_token::id(), false),
             ],
-            data: TokenLockInstruction::RequestWithdrawalEarly
+            data: AstrapeInstruction::RequestWithdrawalEarly
                 .try_to_vec()
                 .unwrap(),
         };
@@ -325,7 +325,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.user.pubkey(), true),
                 AccountMeta::new(self.user_deposit_account, false),
             ],
-            data: TokenLockInstruction::RequestWithdrawal
+            data: AstrapeInstruction::RequestWithdrawal
                 .try_to_vec()
                 .unwrap(),
         };
@@ -358,7 +358,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.user_deposit_account, false),
                 AccountMeta::new_readonly(spl_token::id(), false),
             ],
-            data: TokenLockInstruction::AdminPrepareWithdrawal
+            data: AstrapeInstruction::AdminPrepareWithdrawal
                 .try_to_vec()
                 .unwrap(),
         };
@@ -390,7 +390,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.withdrawal_pool_pda, false),
                 AccountMeta::new_readonly(spl_token::id(), false),
             ],
-            data: TokenLockInstruction::WithdrawCollateral
+            data: AstrapeInstruction::WithdrawCollateral
                 .try_to_vec()
                 .unwrap(),
         };
@@ -417,7 +417,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.admin.pubkey(), true),
                 AccountMeta::new(self.config_pda, false),
             ],
-            data: TokenLockInstruction::AdminUpdateConfig {
+            data: AstrapeInstruction::AdminUpdateConfig {
                 param: 0,                     // Update base interest rate
                 base_interest_rate: Some(60), // Update to 6%
                 price_factor: None,
@@ -490,7 +490,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new_readonly(spl_token::id(), false),
                 AccountMeta::new_readonly(spl_associated_token_account::id(), false),
             ],
-            data: TokenLockInstruction::AdminWithdrawInterest { amount }
+            data: AstrapeInstruction::AdminWithdrawInterest { amount }
                 .try_to_vec()
                 .unwrap(),
         };
@@ -519,7 +519,7 @@ impl<'a> TestHelper<'a> {
                 AccountMeta::new(self.user.pubkey(), true), // User instead of admin
                 AccountMeta::new(self.config_pda, false),
             ],
-            data: TokenLockInstruction::AdminUpdateConfig {
+            data: AstrapeInstruction::AdminUpdateConfig {
                 param: 0,
                 base_interest_rate: Some(80),
                 price_factor: None,

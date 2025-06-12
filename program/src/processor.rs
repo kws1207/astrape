@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     clock::Clock,
@@ -14,8 +15,8 @@ use spl_associated_token_account::instruction as ata_instruction;
 use spl_token::{instruction as token_instruction, state::Account as TokenAccount};
 
 use crate::{
-    errors::{TokenLockError, TokenLockResult},
-    instructions::TokenLockInstruction,
+    errors::{AstrapeError, AstrapeResult},
+    instructions::AstrapeInstruction,
     state::{AstrapeConfig, UserDeposit, UserDepositState},
 };
 
@@ -28,6 +29,8 @@ pub const MS_PER_SLOT: u64 = 440;
 pub const SLOTS_PER_SEC: f64 = 1000.0 / MS_PER_SLOT as f64;
 pub const SLOTS_PER_MONTH: f64 = SLOTS_PER_SEC * 30.0 * 24.0 * 60.0 * 60.0;
 pub const SLOTS_PER_YEAR: f64 = SLOTS_PER_SEC * 365.0 * 24.0 * 60.0 * 60.0;
+
+const PYTH_PRICE_UPDATE_DISCRIMINATOR: &'static [u8] = &[34, 241, 35, 99, 157, 126, 244, 205];
 
 #[cfg(feature = "testnet")]
 pub mod config_feature {
@@ -56,14 +59,14 @@ impl Processor {
         accounts: &[AccountInfo],
         instruction_data: &[u8],
     ) -> ProgramResult {
-        let instruction = TokenLockInstruction::unpack(instruction_data)?;
+        let instruction = AstrapeInstruction::unpack(instruction_data)?;
 
         match instruction {
-            TokenLockInstruction::Initialize {
+            AstrapeInstruction::Initialize {
                 interest_mint,
                 collateral_mint,
                 base_interest_rate,
-                price_factor,
+                pyth_price_max_age,
                 min_commission_rate,
                 max_commission_rate,
                 min_deposit_amount,
@@ -77,7 +80,7 @@ impl Processor {
                     interest_mint,
                     collateral_mint,
                     base_interest_rate,
-                    price_factor,
+                    pyth_price_max_age,
                     min_commission_rate,
                     max_commission_rate,
                     min_deposit_amount,
@@ -85,10 +88,10 @@ impl Processor {
                     deposit_periods,
                 )
             }
-            TokenLockInstruction::AdminUpdateConfig {
+            AstrapeInstruction::AdminUpdateConfig {
                 param,
                 base_interest_rate,
-                price_factor,
+                pyth_price_max_age,
                 min_commission_rate,
                 max_commission_rate,
                 min_deposit_amount,
@@ -101,7 +104,7 @@ impl Processor {
                     accounts,
                     param,
                     base_interest_rate,
-                    price_factor,
+                    pyth_price_max_age,
                     min_commission_rate,
                     max_commission_rate,
                     min_deposit_amount,
@@ -109,23 +112,23 @@ impl Processor {
                     deposit_periods,
                 )
             }
-            TokenLockInstruction::AdminWithdrawCollateralForInvestment => {
+            AstrapeInstruction::AdminWithdrawCollateralForInvestment => {
                 msg!("Instruction: AdminWithdrawCollateralForInvestment");
                 Self::process_admin_withdraw_collateral_for_investment(program_id, accounts)
             }
-            TokenLockInstruction::AdminPrepareWithdrawal => {
+            AstrapeInstruction::AdminPrepareWithdrawal => {
                 msg!("Instruction: AdminPrepareWithdrawal");
                 Self::process_admin_prepare_withdrawal(program_id, accounts)
             }
-            TokenLockInstruction::AdminDepositInterest { amount } => {
+            AstrapeInstruction::AdminDepositInterest { amount } => {
                 msg!("Instruction: AdminDepositInterest");
                 Self::process_admin_deposit_interest(program_id, accounts, amount)
             }
-            TokenLockInstruction::AdminWithdrawInterest { amount } => {
+            AstrapeInstruction::AdminWithdrawInterest { amount } => {
                 msg!("Instruction: AdminWithdrawInterest");
                 Self::process_admin_withdraw_interest(program_id, accounts, amount)
             }
-            TokenLockInstruction::DepositCollateral {
+            AstrapeInstruction::DepositCollateral {
                 amount,
                 deposit_period,
                 commission_rate,
@@ -139,15 +142,15 @@ impl Processor {
                     commission_rate,
                 )
             }
-            TokenLockInstruction::RequestWithdrawalEarly => {
+            AstrapeInstruction::RequestWithdrawalEarly => {
                 msg!("Instruction: RequestWithdrawalEarly");
                 Self::process_request_withdrawal_early(program_id, accounts)
             }
-            TokenLockInstruction::RequestWithdrawal => {
+            AstrapeInstruction::RequestWithdrawal => {
                 msg!("Instruction: RequestWithdrawal");
                 Self::process_request_withdrawal(program_id, accounts)
             }
-            TokenLockInstruction::WithdrawCollateral => {
+            AstrapeInstruction::WithdrawCollateral => {
                 msg!("Instruction: WithdrawCollateral");
                 Self::process_withdraw_collateral(program_id, accounts)
             }
@@ -159,7 +162,7 @@ impl Processor {
         pda: &Pubkey,
         seeds: &[&[u8]],
         program_id: &Pubkey,
-    ) -> Result<u8, TokenLockError> {
+    ) -> Result<u8, AstrapeError> {
         let (expected_pda, bump) = Pubkey::find_program_address(seeds, program_id);
         if expected_pda != *pda {
             msg!(
@@ -168,7 +171,7 @@ impl Processor {
                 expected_pda,
                 pda
             );
-            return Err(TokenLockError::InvalidPDA(1).into());
+            return Err(AstrapeError::InvalidPDA(1).into());
         }
         Ok(bump)
     }
@@ -178,7 +181,7 @@ impl Processor {
         ata: &Pubkey,
         wallet: &Pubkey,
         mint: &Pubkey,
-    ) -> Result<(), TokenLockError> {
+    ) -> Result<(), AstrapeError> {
         let expected_ata = spl_associated_token_account::get_associated_token_address(wallet, mint);
         if expected_ata != *ata {
             msg!(
@@ -187,18 +190,36 @@ impl Processor {
                 expected_ata,
                 ata
             );
-            return Err(TokenLockError::InvalidPDA(1).into());
+            return Err(AstrapeError::InvalidPDA(1).into());
         }
         Ok(())
     }
 
+    fn deserialize_price_update(
+        pyth_price_feed_account: &AccountInfo,
+    ) -> Result<PriceUpdateV2, AstrapeError> {
+        let buf = pyth_price_feed_account.data.borrow();
+        if buf.len() < PYTH_PRICE_UPDATE_DISCRIMINATOR.len() {
+            return Err(AstrapeError::InvalidPythPriceFeed);
+        }
+        let given_disc = &buf[..PYTH_PRICE_UPDATE_DISCRIMINATOR.len()];
+        if PYTH_PRICE_UPDATE_DISCRIMINATOR != given_disc {
+            return Err(AstrapeError::InvalidPythPriceFeed);
+        }
+        let mut data: &[u8] = &buf[PYTH_PRICE_UPDATE_DISCRIMINATOR.len()..];
+        let price_update = PriceUpdateV2::deserialize(&mut data)
+            .map_err(|_| AstrapeError::InvalidPythPriceFeed)?;
+        Ok(price_update)
+    }
+
     pub fn calculate_interest_amount(
         amount: u64,
+        price: u64,
         commission_rate: u64,
         deposit_period: u64,
         config: &AstrapeConfig,
     ) -> u64 {
-        let collateral_value_in_interest = amount * config.price_factor;
+        let collateral_value_in_interest = amount * price;
         let base_interest_rate = config.base_interest_rate as f64 / 1000.0;
         let deposit_period_in_years = deposit_period as f64 / SLOTS_PER_YEAR;
         let ratio_without_commission = (1000.0 - commission_rate as f64) / 1000.0;
@@ -214,7 +235,7 @@ impl Processor {
     pub fn calculate_interest_to_return(
         user_deposit: &UserDeposit,
         current_slot: u64,
-    ) -> Result<u64, TokenLockError> {
+    ) -> Result<u64, AstrapeError> {
         // Calculate remaining interest to be returned based on actual lock duration
         let actual_lock_duration = current_slot - user_deposit.deposit_slot;
         let total_lock_duration = user_deposit.unlock_slot - user_deposit.deposit_slot;
@@ -223,13 +244,13 @@ impl Processor {
             .checked_mul(actual_lock_duration as u128)
         {
             Some(v) => v,
-            None => return Err(TokenLockError::ArithmeticOverflow.into()),
+            None => return Err(AstrapeError::ArithmeticOverflow.into()),
         };
 
         let interest_to_return = match interest_to_return.checked_div(total_lock_duration as u128) {
             Some(v) => v,
             None => {
-                return Err(TokenLockError::DivisionByZero.into());
+                return Err(AstrapeError::DivisionByZero.into());
             }
         } as u64;
 
@@ -242,7 +263,7 @@ impl Processor {
         interest_mint: Pubkey,
         collateral_mint: Pubkey,
         base_interest_rate: u64,
-        price_factor: u64,
+        pyth_price_max_age: u64,
         min_commission_rate: u64,
         max_commission_rate: u64,
         min_deposit_amount: u64,
@@ -266,7 +287,7 @@ impl Processor {
         // Verify admin
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             msg!("Admin must be a signer");
-            return Err(TokenLockError::SignerRequired.into());
+            return Err(AstrapeError::SignerRequired.into());
         }
 
         // Verify PDAs
@@ -313,7 +334,7 @@ impl Processor {
                 solana_program::system_program::id(),
                 system_program_info.key
             );
-            return Err(TokenLockError::InvalidAccountOwner.into());
+            return Err(AstrapeError::InvalidAccountOwner.into());
         }
 
         // 2. token program
@@ -323,7 +344,7 @@ impl Processor {
                 spl_token::id(),
                 token_program_info.key
             );
-            return Err(TokenLockError::InvalidAccountOwner.into());
+            return Err(AstrapeError::InvalidAccountOwner.into());
         }
 
         // 3. ATA program
@@ -333,26 +354,26 @@ impl Processor {
                 spl_associated_token_account::id(),
                 ata_program_info.key
             );
-            return Err(TokenLockError::InvalidAccountOwner.into());
+            return Err(AstrapeError::InvalidAccountOwner.into());
         }
 
         // Check if accounts are already initialized
         if config_info.owner != system_program_info.key {
-            return Err(TokenLockError::AccountAlreadyInitialized.into());
+            return Err(AstrapeError::AccountAlreadyInitialized.into());
         }
 
         // Validate configuration parameters
         if min_commission_rate > max_commission_rate {
-            return Err(TokenLockError::InvalidInput.into());
+            return Err(AstrapeError::InvalidInput.into());
         }
         if min_deposit_amount > max_deposit_amount {
-            return Err(TokenLockError::InvalidInput.into());
+            return Err(AstrapeError::InvalidInput.into());
         }
         if deposit_periods.is_empty() {
-            return Err(TokenLockError::InvalidInput.into());
+            return Err(AstrapeError::InvalidInput.into());
         }
-        if price_factor == 0 {
-            return Err(TokenLockError::ValueOutOfRange(0).into());
+        if pyth_price_max_age == 0 {
+            return Err(AstrapeError::ValueOutOfRange(0).into());
         }
 
         let rent = Rent::get()?;
@@ -476,7 +497,7 @@ impl Processor {
             interest_mint,
             collateral_mint,
             base_interest_rate,
-            price_factor,
+            pyth_price_max_age,
             min_commission_rate,
             max_commission_rate,
             min_deposit_amount,
@@ -495,7 +516,7 @@ impl Processor {
         accounts: &[AccountInfo],
         param: u8,
         base_interest_rate: Option<u64>,
-        price_factor: Option<u64>,
+        pyth_price_max_age: Option<u64>,
         min_commission_rate: Option<u64>,
         max_commission_rate: Option<u64>,
         min_deposit_amount: Option<u64>,
@@ -509,7 +530,7 @@ impl Processor {
         // Verify admin
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
             msg!("Admin must be a signer");
-            return Err(TokenLockError::SignerRequired.into());
+            return Err(AstrapeError::SignerRequired.into());
         }
 
         // Verify config PDA
@@ -525,13 +546,13 @@ impl Processor {
                 }
             }
             1 => {
-                if let Some(factor) = price_factor {
-                    if factor == 0 {
+                if let Some(pyth_price_max_age) = pyth_price_max_age {
+                    if pyth_price_max_age == 0 {
                         msg!("Price factor cannot be zero");
-                        return Err(TokenLockError::ValueOutOfRange(0).into());
+                        return Err(AstrapeError::ValueOutOfRange(0).into());
                     }
-                    config.price_factor = factor;
-                    msg!("Updated price factor to {}", factor);
+                    config.pyth_price_max_age = pyth_price_max_age;
+                    msg!("Updated pyth price max age to {}", pyth_price_max_age);
                 }
             }
             2 => {
@@ -542,7 +563,7 @@ impl Processor {
                             min_rate,
                             config.max_commission_rate
                         );
-                        return Err(TokenLockError::ValueOutOfRange(min_rate).into());
+                        return Err(AstrapeError::ValueOutOfRange(min_rate).into());
                     }
                     config.min_commission_rate = min_rate;
                     msg!("Updated min commission rate to {}", min_rate);
@@ -556,7 +577,7 @@ impl Processor {
                             max_rate,
                             config.min_commission_rate
                         );
-                        return Err(TokenLockError::ValueOutOfRange(max_rate).into());
+                        return Err(AstrapeError::ValueOutOfRange(max_rate).into());
                     }
                     config.max_commission_rate = max_rate;
                     msg!("Updated max commission rate to {}", max_rate);
@@ -570,7 +591,7 @@ impl Processor {
                             min_amount,
                             config.max_deposit_amount
                         );
-                        return Err(TokenLockError::ValueOutOfRange(min_amount).into());
+                        return Err(AstrapeError::ValueOutOfRange(min_amount).into());
                     }
                     config.min_deposit_amount = min_amount;
                     msg!("Updated min deposit amount to {}", min_amount);
@@ -584,7 +605,7 @@ impl Processor {
                             max_amount,
                             config.min_deposit_amount
                         );
-                        return Err(TokenLockError::ValueOutOfRange(max_amount).into());
+                        return Err(AstrapeError::ValueOutOfRange(max_amount).into());
                     }
                     config.max_deposit_amount = max_amount;
                     msg!("Updated max deposit amount to {}", max_amount);
@@ -594,7 +615,7 @@ impl Processor {
                 if let Some(periods) = deposit_periods {
                     if periods.is_empty() {
                         msg!("Deposit periods cannot be empty");
-                        return Err(TokenLockError::InvalidInput.into());
+                        return Err(AstrapeError::InvalidInput.into());
                     }
                     config.deposit_periods = periods.clone();
                     msg!("Updated deposit periods to {:?}", periods);
@@ -602,7 +623,7 @@ impl Processor {
             }
             _ => {
                 msg!("Invalid config parameter: {}", param);
-                return Err(TokenLockError::InvalidConfigParam(param).into());
+                return Err(AstrapeError::InvalidConfigParam(param).into());
             }
         }
 
@@ -628,7 +649,7 @@ impl Processor {
 
         // Verify admin
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
-            return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
+            return Err(AstrapeError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
         let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
@@ -670,7 +691,7 @@ impl Processor {
         // Get pool's collateral balance
         let amount = TokenAccount::unpack(&collateral_pool_account.data.borrow())?.amount;
         if amount == 0 {
-            return Err(TokenLockError::InsufficientPoolBalance(0))
+            return Err(AstrapeError::InsufficientPoolBalance(0))
                 .with_context("Insufficient pool balance");
         }
 
@@ -711,7 +732,7 @@ impl Processor {
         // Verify admin
         // For testing purposes, just verify the signer
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
-            return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
+            return Err(AstrapeError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
         let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
@@ -740,7 +761,7 @@ impl Processor {
                 deposit.state,
                 UserDepositState::WithdrawRequested
             );
-            return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
+            return Err(AstrapeError::InvalidDepositState(current_state, expected_state).into());
         }
 
         // Transfer collateral from admin to withdrawal pool (not the main pool)
@@ -787,7 +808,7 @@ impl Processor {
         // Verify admin
         // For testing purposes, just verify the signer
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
-            return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
+            return Err(AstrapeError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
         let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
@@ -844,7 +865,7 @@ impl Processor {
         // Verify admin
         // For testing purposes, just verify the signer
         if !admin_info.is_signer || config_feature::admin::id() != *admin_info.key {
-            return Err(TokenLockError::InvalidAdmin(0)).with_context("Admin must be signer");
+            return Err(AstrapeError::InvalidAdmin(0)).with_context("Admin must be signer");
         }
 
         let _ = Self::check_pda("config", config_info.key, &[CONFIG_SEED], program_id)?;
@@ -926,6 +947,7 @@ impl Processor {
         let collateral_pool_account = next_account_info(account_info_iter)?;
         let user_interest_account = next_account_info(account_info_iter)?;
         let interest_pool_account = next_account_info(account_info_iter)?;
+        let pyth_price_feed_account = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
 
@@ -975,7 +997,7 @@ impl Processor {
                 &[&[user_info.key.as_ref(), &[user_deposit_bump]]],
             )?;
         } else {
-            return Err(TokenLockError::UserDepositAlreadyExists.into());
+            return Err(AstrapeError::UserDepositAlreadyExists.into());
         }
 
         let clock = Clock::get()?;
@@ -988,7 +1010,7 @@ impl Processor {
                 config.min_deposit_amount,
                 config.max_deposit_amount
             );
-            return Err(TokenLockError::DepositAmountOutOfBounds(amount).into());
+            return Err(AstrapeError::DepositAmountOutOfBounds(amount).into());
         }
         if commission_rate < config.min_commission_rate
             || commission_rate > config.max_commission_rate
@@ -999,7 +1021,7 @@ impl Processor {
                 config.min_commission_rate,
                 config.max_commission_rate
             );
-            return Err(TokenLockError::CommissionRateOutOfBounds(commission_rate).into());
+            return Err(AstrapeError::CommissionRateOutOfBounds(commission_rate).into());
         }
 
         // Verify lock period is valid
@@ -1009,11 +1031,29 @@ impl Processor {
                 deposit_period,
                 config.deposit_periods
             );
-            return Err(TokenLockError::InvalidLockPeriod(deposit_period).into());
+            return Err(AstrapeError::InvalidLockPeriod(deposit_period).into());
         }
 
-        let interest_amount =
-            Self::calculate_interest_amount(amount, commission_rate, deposit_period, &config);
+        let price_update = Self::deserialize_price_update(pyth_price_feed_account)?;
+
+        let feed_id = get_feed_id_from_hex(
+            "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+        )
+        .map_err(|_| AstrapeError::GetPriceError)?;
+
+        let price_object = price_update
+            .get_price_no_older_than(&Clock::get()?, config.pyth_price_max_age, &feed_id)
+            .map_err(|_| AstrapeError::GetPriceError)?;
+
+        let price = price_object.price as u64 * (10_u64.pow(price_object.exponent as u32));
+
+        let interest_amount = Self::calculate_interest_amount(
+            amount,
+            price,
+            commission_rate,
+            deposit_period,
+            &config,
+        );
 
         // Transfer collateral to pool
         invoke(
@@ -1115,7 +1155,7 @@ impl Processor {
                 deposit.state,
                 UserDepositState::Deposited
             );
-            return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
+            return Err(AstrapeError::InvalidDepositState(current_state, expected_state).into());
         }
 
         let interest_to_return = Self::calculate_interest_to_return(&deposit, clock.slot)?;
@@ -1129,7 +1169,7 @@ impl Processor {
                 user_interest_balance,
                 interest_to_return
             );
-            return Err(TokenLockError::InsufficientInterestBalance(user_interest_balance).into());
+            return Err(AstrapeError::InsufficientInterestBalance(user_interest_balance).into());
         }
 
         // Transfer interest back to pool
@@ -1182,7 +1222,7 @@ impl Processor {
                 UserDepositState::WithdrawRequested
             );
 
-            return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
+            return Err(AstrapeError::InvalidDepositState(current_state, expected_state).into());
         }
 
         if clock.slot < deposit.unlock_slot {
@@ -1191,7 +1231,7 @@ impl Processor {
                 clock.slot,
                 deposit.unlock_slot
             );
-            return Err(TokenLockError::NotUnlockedYet(clock.slot, deposit.unlock_slot).into());
+            return Err(AstrapeError::NotUnlockedYet(clock.slot, deposit.unlock_slot).into());
         }
 
         deposit.state = UserDepositState::WithdrawReady;
@@ -1245,7 +1285,7 @@ impl Processor {
                 deposit.state,
                 UserDepositState::WithdrawReady
             );
-            return Err(TokenLockError::InvalidDepositState(current_state, expected_state).into());
+            return Err(AstrapeError::InvalidDepositState(current_state, expected_state).into());
         }
 
         // Check if withdrawal pool has enough tokens
@@ -1256,7 +1296,7 @@ impl Processor {
                 pool_balance,
                 deposit.amount
             );
-            return Err(TokenLockError::InsufficientPoolBalance(pool_balance).into());
+            return Err(AstrapeError::InsufficientPoolBalance(pool_balance).into());
         }
 
         // Transfer collateral from withdrawal pool to user

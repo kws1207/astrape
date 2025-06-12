@@ -2,7 +2,7 @@ use solana_program::{msg, program_error::ProgramError};
 use thiserror::Error;
 
 #[derive(Error, Debug, Copy, Clone, PartialEq)]
-pub enum TokenLockError {
+pub enum AstrapeError {
     // Basic instruction errors
     #[error("Invalid instruction code: {0}")]
     InvalidInstruction(u8),
@@ -88,6 +88,12 @@ pub enum TokenLockError {
     #[error("Invalid input")]
     InvalidInput,
 
+    #[error("Invalid Pyth price feed")]
+    InvalidPythPriceFeed,
+
+    #[error("Invalid Pyth price")]
+    GetPriceError,
+
     #[error("Unexpected error")]
     Unexpected,
 }
@@ -96,40 +102,42 @@ pub enum TokenLockError {
 const TOKEN_LOCK_ERROR_CODE_BASE: u32 = 1000;
 
 // Mapping from TokenLockError to u32 error codes
-impl From<TokenLockError> for ProgramError {
-    fn from(e: TokenLockError) -> Self {
+impl From<AstrapeError> for ProgramError {
+    fn from(e: AstrapeError) -> Self {
         // Log the detailed error for on-chain visibility
         msg!("Token Lock Error: {}", e);
 
         // Add a specific offset to generate custom error codes
         let error_code = match e {
-            TokenLockError::InvalidInstruction(_) => 0,
-            TokenLockError::InvalidAdmin(_) => 1,
-            TokenLockError::SignerRequired => 2,
-            TokenLockError::InvalidPoolAccount(_) => 3,
-            TokenLockError::InvalidAccountOwner => 4,
-            TokenLockError::InvalidMint => 5,
-            TokenLockError::InvalidPDA(_) => 6,
-            TokenLockError::AccountAlreadyInitialized => 7,
-            TokenLockError::AccountNotInitialized => 8,
-            TokenLockError::NotUnlockedYet(_, _) => 9,
-            TokenLockError::UserDepositAlreadyExists => 10,
-            TokenLockError::InvalidLockPeriod(_) => 11,
-            TokenLockError::InvalidConfigParam(_) => 12,
-            TokenLockError::DepositAmountOutOfBounds(_) => 13,
-            TokenLockError::CommissionRateOutOfBounds(_) => 14,
-            TokenLockError::ValueOutOfRange(_) => 15,
-            TokenLockError::InsufficientBalance(_) => 16,
-            TokenLockError::InsufficientPoolBalance(_) => 17,
-            TokenLockError::InsufficientInterestBalance(_) => 18,
-            TokenLockError::NoDepositFound => 19,
-            TokenLockError::InvalidDepositState(_, _) => 20,
-            TokenLockError::OperationNotAllowed(_) => 21,
-            TokenLockError::LockPeriodNotExpired => 22,
-            TokenLockError::ArithmeticOverflow => 23,
-            TokenLockError::DivisionByZero => 24,
-            TokenLockError::InvalidInput => 25,
-            TokenLockError::Unexpected => 26,
+            AstrapeError::InvalidInstruction(_) => 0,
+            AstrapeError::InvalidAdmin(_) => 1,
+            AstrapeError::SignerRequired => 2,
+            AstrapeError::InvalidPoolAccount(_) => 3,
+            AstrapeError::InvalidAccountOwner => 4,
+            AstrapeError::InvalidMint => 5,
+            AstrapeError::InvalidPDA(_) => 6,
+            AstrapeError::AccountAlreadyInitialized => 7,
+            AstrapeError::AccountNotInitialized => 8,
+            AstrapeError::NotUnlockedYet(_, _) => 9,
+            AstrapeError::UserDepositAlreadyExists => 10,
+            AstrapeError::InvalidLockPeriod(_) => 11,
+            AstrapeError::InvalidConfigParam(_) => 12,
+            AstrapeError::DepositAmountOutOfBounds(_) => 13,
+            AstrapeError::CommissionRateOutOfBounds(_) => 14,
+            AstrapeError::ValueOutOfRange(_) => 15,
+            AstrapeError::InsufficientBalance(_) => 16,
+            AstrapeError::InsufficientPoolBalance(_) => 17,
+            AstrapeError::InsufficientInterestBalance(_) => 18,
+            AstrapeError::NoDepositFound => 19,
+            AstrapeError::InvalidDepositState(_, _) => 20,
+            AstrapeError::OperationNotAllowed(_) => 21,
+            AstrapeError::LockPeriodNotExpired => 22,
+            AstrapeError::ArithmeticOverflow => 23,
+            AstrapeError::DivisionByZero => 24,
+            AstrapeError::InvalidInput => 25,
+            AstrapeError::Unexpected => 26,
+            AstrapeError::InvalidPythPriceFeed => 27,
+            AstrapeError::GetPriceError => 28,
         };
 
         ProgramError::Custom(TOKEN_LOCK_ERROR_CODE_BASE + error_code)
@@ -137,7 +145,7 @@ impl From<TokenLockError> for ProgramError {
 }
 
 // Helper methods for better error context
-impl TokenLockError {
+impl AstrapeError {
     pub fn log_and_return<T>(self) -> Result<T, ProgramError> {
         msg!("Token Lock Error: {:?}", self);
         Err(self.into())
@@ -164,12 +172,12 @@ impl TokenLockError {
 }
 
 // Extension trait for Result to make error handling cleaner
-pub trait TokenLockResult<T> {
+pub trait AstrapeResult<T> {
     fn log_error(self) -> Result<T, ProgramError>;
     fn with_context(self, error_context: &str) -> Result<T, ProgramError>;
 }
 
-impl<T> TokenLockResult<T> for Result<T, TokenLockError> {
+impl<T> AstrapeResult<T> for Result<T, AstrapeError> {
     fn log_error(self) -> Result<T, ProgramError> {
         match self {
             Ok(value) => Ok(value),

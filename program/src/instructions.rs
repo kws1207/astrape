@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{program_error::ProgramError, pubkey::Pubkey};
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
-pub enum TokenLockInstruction {
+pub enum AstrapeInstruction {
     /// Initialize the pool with configuration and create necessary PDAs
     ///
     /// Accounts expected:
@@ -22,7 +22,7 @@ pub enum TokenLockInstruction {
         interest_mint: Pubkey,
         collateral_mint: Pubkey,
         base_interest_rate: u64,
-        price_factor: u64,
+        pyth_price_max_age: u64,
         min_commission_rate: u64,
         max_commission_rate: u64,
         min_deposit_amount: u64,
@@ -38,7 +38,7 @@ pub enum TokenLockInstruction {
     AdminUpdateConfig {
         param: u8,
         base_interest_rate: Option<u64>,
-        price_factor: Option<u64>,
+        pyth_price_max_age: Option<u64>,
         min_commission_rate: Option<u64>,
         max_commission_rate: Option<u64>,
         min_deposit_amount: Option<u64>,
@@ -108,8 +108,9 @@ pub enum TokenLockInstruction {
     /// 5. `[writable]` Pool's collateral token account
     /// 6. `[writable]` User's interest token account
     /// 7. `[writable]` Pool's interest token account
-    /// 8. `[]` System program
-    /// 9. `[]` Token program
+    /// 8. `[]` Pyth price feed account
+    /// 9. `[]` System program
+    /// 10. `[]` Token program
     DepositCollateral {
         amount: u64,
         deposit_period: u64,
@@ -148,7 +149,7 @@ pub enum TokenLockInstruction {
     WithdrawCollateral,
 }
 
-impl TokenLockInstruction {
+impl AstrapeInstruction {
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
         let instruction = Self::try_from_slice(input)?;
         Ok(instruction)
@@ -160,7 +161,7 @@ impl TokenLockInstruction {
                 interest_mint,
                 collateral_mint,
                 base_interest_rate,
-                price_factor,
+                pyth_price_max_age,
                 min_commission_rate,
                 max_commission_rate,
                 min_deposit_amount,
@@ -171,7 +172,7 @@ impl TokenLockInstruction {
                 buffer.extend_from_slice(&interest_mint.to_bytes());
                 buffer.extend_from_slice(&collateral_mint.to_bytes());
                 buffer.extend_from_slice(&base_interest_rate.to_le_bytes());
-                buffer.extend_from_slice(&price_factor.to_le_bytes());
+                buffer.extend_from_slice(&pyth_price_max_age.to_le_bytes());
                 buffer.extend_from_slice(&min_commission_rate.to_le_bytes());
                 buffer.extend_from_slice(&max_commission_rate.to_le_bytes());
                 buffer.extend_from_slice(&min_deposit_amount.to_le_bytes());
@@ -186,7 +187,7 @@ impl TokenLockInstruction {
             Self::AdminUpdateConfig {
                 param,
                 base_interest_rate,
-                price_factor,
+                pyth_price_max_age,
                 min_commission_rate,
                 max_commission_rate,
                 min_deposit_amount,
@@ -201,9 +202,9 @@ impl TokenLockInstruction {
                 } else {
                     buffer.push(0);
                 }
-                if let Some(factor) = price_factor {
+                if let Some(pyth_price_max_age) = pyth_price_max_age {
                     buffer.push(1);
-                    buffer.extend_from_slice(&factor.to_le_bytes());
+                    buffer.extend_from_slice(&pyth_price_max_age.to_le_bytes());
                 } else {
                     buffer.push(0);
                 }
